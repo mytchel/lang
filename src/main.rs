@@ -41,8 +41,11 @@ struct Reader<'a> {
 	index: usize,
 }
 
-enum Expr {
-	F(Token),
+enum Expr<'a> {
+	O(&'a Token, Box<Expr<'a>>, Box<Expr<'a>>),
+	B(Box<Expr<'a>>, Box<Expr<'a>>),
+	F(&'a Token),
+	N,
 }
 
 impl fmt::Display for Token {
@@ -84,10 +87,13 @@ impl fmt::Display for Token {
 	}
 }
 
-impl fmt::Display for Expr {
+impl<'a> fmt::Display for Expr<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let str = match self {
-			Expr::F(_t) => "F".to_string(),
+			Expr::F(t) => format!("{}", t).to_string(),
+			Expr::O(o, e1, e2) => format!(" {} {}{}", o, e1, e2).to_string(),
+			Expr::B(e1, e2) => format!("({}{})", e1, e2).to_string(),
+			Expr::N => "".to_string(),
 		};
 
 		write!(f, "{}", str)
@@ -374,21 +380,42 @@ fn tokenize(input: String) -> Vec<Token> {
 	tokens
 }
 
-fn parse_f(tokens: &mut &[Token]) -> Option<Expr>
+fn parse_match<'a>(expect: Token, tokens: &mut &'a [Token]) -> bool
 {
 	let t = &tokens[0];
-	*tokens = &tokens[1..];
+	match t {
+		expect => {
+			*tokens = &tokens[1..];
+			true
+		},
+		_ => false
+	}
+}
+
+fn parse_f<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
+{
+	let t = &tokens[0];
 
 	match t {
+		Token::Lparen => {
+			*tokens = &tokens[1..];
+			let r = parse_expr(tokens);
+			if !parse_match(Token::Rparen, tokens) {
+				panic!("expected )");
+			} else {
+				r
+			}
+		},
 		Token::Integer(i) => {
+			*tokens = &tokens[1..];
 			print!(" {} ", i);
-			None
+			Some(Expr::F(t))
 		}
 		tt => panic!("unexpected {}", tt),
 	}
 }
 
-fn parse_term_p(tokens: &mut &[Token]) -> Option<Expr>
+fn parse_term_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 {
 	let t = &tokens[0];
 
@@ -396,58 +423,81 @@ fn parse_term_p(tokens: &mut &[Token]) -> Option<Expr>
 		Token::OpMul => {
 			*tokens = &tokens[1..];
 			print!("*");
-			let f = parse_f(tokens);
-			let e = parse_term_p(tokens);
-			None
+			let f = parse_f(tokens)?;
+			let e = match parse_term_p(tokens) {
+				Some(term) => term,
+				None => Expr::N,
+			};
+			Some(Expr::O(t, Box::new(f), Box::new(e)))
 		},
 		_ => None,
 	}
 }
 
-fn parse_term(tokens: &mut &[Token]) -> Option<Expr>
+fn parse_term<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 {
 	print!("(");
-	let f = parse_f(tokens);
-	let e = parse_term_p(tokens);
+	
+	let f = parse_f(tokens)?;;
+	let e = match parse_term_p(tokens) {
+		Some(term) => term,
+		None => Expr::N,
+	};
+
 	print!(")");
-	None
+	Some(Expr::B(Box::new(f), Box::new(e)))
 }
 
-fn parse_expr_p(tokens: &mut &[Token]) -> Option<Expr>
+fn parse_expr_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 {
 	let t = &tokens[0];
-
 	match t {
 		Token::OpAdd => {
 			*tokens = &tokens[1..];
 			print!("+");
-			let f = parse_term(tokens);
-			let e = parse_expr_p(tokens);
-			None
+			let f = parse_term(tokens)?;
+			let e = match parse_expr_p(tokens) {
+				Some(expr) => expr,
+				None => Expr::N,
+			};
+
+			Some(Expr::O(t, Box::new(f), Box::new(e)))
 		},
 		_ => None,
 	}
 }
 
-fn parse_expr(tokens: &mut &[Token]) -> Option<Expr>
+fn parse_expr<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 {
-	let t = &tokens[0];
+	if tokens.len() == 0 {
+		return None
+	}
 
-	match t {
-		Token::Semicolon => {
-			*tokens = &tokens[1..];
-			println!(" ; ");
-			None
-		},
-		_ => {
-			let f = parse_term(tokens);
-			let e = parse_expr_p(tokens);
-			None
-		}
+	let f = parse_term(tokens)?;
+	let e = match parse_expr_p(tokens) {
+		Some(expr) => expr,
+		None => Expr::N,
+	};
+	
+	Some(Expr::B(Box::new(f), Box::new(e)))
+}
+
+fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
+{
+	if tokens.len() == 0 {
+		return None
+	}
+
+	let r = parse_expr(tokens);
+
+	if !parse_match(Token::Semicolon, tokens) {
+		panic!("expected )");
+	} else {
+		r
 	}
 }
 
-fn parse(tokens: &[Token]) -> Vec<Expr>
+fn parse<'a>(tokens: &'a [Token]) -> Vec<Expr<'a>>
 {
 	println!("parse tokens");
 
@@ -455,15 +505,11 @@ fn parse(tokens: &[Token]) -> Vec<Expr>
 
 	let mut exprs: Vec<Expr> = vec![];
 
-	while mtokens.len() > 0 {
-		parse_expr(&mut mtokens);
-	}
-/*
-	while let Some(e) = parse_expr(&mut mtokens) {
+	while let Some(e) = parse_stmt(&mut mtokens) {
 		println!("have expression: {}", e);
 		exprs.push(e)
 	}
-*/
+
 	exprs
 }
 
