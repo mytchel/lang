@@ -1,19 +1,20 @@
-hello there
 // this is a comment
-hi again
-/* this is
-a multi line
-comment */
-hi against
-1234+4333   - 3920.542 * (32 + 11) / hello[44]
-1000_2000_3000
-0b0011000
-0b0011_1000_0101
 
-//0ba011234
-0xa011234
-//0x40g1234
-1.543
+/* so is this.
+ * a multi line comment
+ * in fact.
+  */
 
+/* E  -> T E'
+   E' -> + T E' | ;
+   T  -> F T';
+   T' -> * F T' | ;
+   F  -> int
+*/
 
+10 + 15 + 35;
+32 + 87 * 19;
+43 * 48 + 2;
+2 + 4 + 2 * 4;
+5 + 3;
 

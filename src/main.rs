@@ -10,6 +10,11 @@ enum Token {
 	Rbrace,
 	Lsquare,
 	Rsquare,
+	Comma,
+	Semicolon,
+	Colon,
+	Ref,
+	Pipe,
 	OpMul,
 	OpDiv,
 	OpAdd,
@@ -21,11 +26,23 @@ enum Token {
 	CompGreater,
 	CompLessEqual,
 	CompLess,
+	CompAnd,
+	CompOr,
 	Assign,
 	Integer(i64),
 	Float(f64),
 	Bool(bool),
+	String(String),
 	Symbol(String),
+}
+
+struct Reader<'a> {
+	input: &'a Vec<char>,
+	index: usize,
+}
+
+enum Expr {
+	F(Token),
 }
 
 impl fmt::Display for Token {
@@ -37,6 +54,11 @@ impl fmt::Display for Token {
 			Token::Rbrace => "}".to_string(),
 			Token::Lsquare => "[".to_string(),
 			Token::Rsquare => "]".to_string(),
+			Token::Semicolon => ";".to_string(),
+			Token::Colon => ":".to_string(),
+			Token::Comma => ",".to_string(),
+			Token::Ref => "&".to_string(),
+			Token::Pipe => "|".to_string(),
 			Token::OpMul => "*".to_string(),
 			Token::OpDiv => "/".to_string(),
 			Token::OpAdd => "+".to_string(),
@@ -48,10 +70,13 @@ impl fmt::Display for Token {
 			Token::CompLessEqual => "<=".to_string(),
 			Token::CompGreater => ">".to_string(),
 			Token::CompLess => "<".to_string(),
+			Token::CompAnd => "&&".to_string(),
+			Token::CompOr => "||".to_string(),
 			Token::Assign => "=".to_string(),
 			Token::Integer(i) => i.to_string(),
 			Token::Float(i) => i.to_string(),
 			Token::Bool(i) => i.to_string(),
+			Token::String(i) => i.clone(),
 			Token::Symbol(i) => i.clone(),
 		};
 
@@ -59,9 +84,14 @@ impl fmt::Display for Token {
 	}
 }
 
-struct Reader<'a> {
-	input: &'a Vec<char>,
-	index: usize,
+impl fmt::Display for Expr {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let str = match self {
+			Expr::F(_t) => "F".to_string(),
+		};
+
+		write!(f, "{}", str)
+	}
 }
 
 impl Reader<'_> {
@@ -115,38 +145,7 @@ impl Reader<'_> {
 
 	fn take_next(&mut self) -> Vec<char> {
 		fn f (_i: usize, c: char) -> bool {
-			if c.is_whitespace() {
-				false
-
-			} else if c == '(' 
-					|| c == ')'
-					|| c == '['
-					|| c == ']'
-					|| c == '{'
-					|| c == '}'
-			{
-				false
-
-			} else if c == '*'
-					|| c == '/'
-					|| c == '+'
-					|| c == '-'
-					|| c == '>'
-					|| c == '<'
-					|| c == '='
-					|| c == '!'
-					|| c == '@'
-					|| c == '#'
-					|| c == '$'
-					|| c == '%'
-					|| c == '^'
-					|| c == '&'
-			{
-				false
-
-			} else {
-				true
-			}
+			c.is_alphanumeric() || c == '.' || c == '_'
 		}
 
 		self.take(0, f)
@@ -163,7 +162,9 @@ fn parse_comment(r: &mut Reader) -> bool {
 		true
 	} else if r.take_match("/*") {
 		while !r.take_match("*/") {
-			r.take(1, |_, _| true);
+			if r.take(1, |_, _| true).len() == 0 {
+				panic!("comment end not found!");
+			}
 		}
 		true
 	} else {
@@ -171,7 +172,8 @@ fn parse_comment(r: &mut Reader) -> bool {
 	}
 }
 
-fn parse_brace(r: &mut Reader) -> Option<Token> {
+fn parse_syntax(r: &mut Reader) -> Option<Token> {
+	/* braces */
 	if r.take_match("(") {
 		Some(Token::Lparen)
 	} else if r.take_match(")") {
@@ -184,13 +186,33 @@ fn parse_brace(r: &mut Reader) -> Option<Token> {
 		Some(Token::Lsquare)
 	} else if r.take_match("]") {
 		Some(Token::Rsquare)
-	} else {
-		None
-	}
-}
 
-fn parse_operator(r: &mut Reader) -> Option<Token> {
-	if r.take_match("*") {
+	/* double character */
+	} else if r.take_match("==") {
+		Some(Token::CompEqual)
+	} else if r.take_match("!=") {
+		Some(Token::CompInEqual)
+	} else if r.take_match(">=") {
+		Some(Token::CompGreaterEqual)
+	} else if r.take_match("<=") {
+		Some(Token::CompLessEqual)
+	} else if r.take_match("&&") {
+		Some(Token::CompAnd)
+	} else if r.take_match("||") {
+		Some(Token::CompOr)
+
+	} else if r.take_match(";") {
+		Some(Token::Semicolon)
+	} else if r.take_match(":") {
+		Some(Token::Colon)
+	} else if r.take_match(",") {
+		Some(Token::Comma)
+	} else if r.take_match("&") {
+		Some(Token::Ref)
+	} else if r.take_match("|") {
+		Some(Token::Pipe)
+
+	} else if r.take_match("*") {
 		Some(Token::OpMul)
 	} else if r.take_match("/") {
 		Some(Token::OpDiv)
@@ -200,20 +222,32 @@ fn parse_operator(r: &mut Reader) -> Option<Token> {
 		Some(Token::OpSub)
 	} else if r.take_match("%") {
 		Some(Token::OpRem)
-	} else if r.take_match("==") {
-		Some(Token::CompEqual)
-	} else if r.take_match("!=") {
-		Some(Token::CompInEqual)
-	} else if r.take_match(">=") {
-		Some(Token::CompGreaterEqual)
-	} else if r.take_match("<=") {
-		Some(Token::CompLessEqual)
+
 	} else if r.take_match(">") {
 		Some(Token::CompGreater)
 	} else if r.take_match("<") {
 		Some(Token::CompLess)
 	} else if r.take_match("=") {
 		Some(Token::Assign)
+	} else {
+		None
+	}
+}
+
+fn parse_string(r: &mut Reader) -> Option<Token> {
+	if r.take_match("\"") {
+		let mut v: Vec<char> = Vec::new();
+		while !r.take_match("\"") {
+			let g = r.take(1, |_, _| true);
+			if g.len() == 1 {
+				v.push(g[0])
+			} else {
+				panic!("string end not found!");
+			}
+		}
+
+		let s: String = v.into_iter().collect();
+		Some(Token::String(s))
 	} else {
 		None
 	}
@@ -270,7 +304,7 @@ fn parse_number(v: Vec<char>) -> Option<Token> {
 		.or_else(|_| cleaned.parse::<f64>().map(Token::Float))
 		.ok()
 }
-	
+
 fn parse_piece(r: &mut Reader) -> Option<Token> {
 	let v = r.take_next();
 	println!("got {:?}", v);
@@ -289,7 +323,9 @@ fn parse_piece(r: &mut Reader) -> Option<Token> {
 
 	} else if v[0].is_alphabetic() || v[0] == '_' {
 		let s: String = v.into_iter().collect();
-		
+
+		/* TODO: make sure there are no .'s in it */
+
 		println!("symbol = {}", s);
 
 		match s.as_str() {
@@ -310,8 +346,8 @@ fn tokenize_single(r: &mut Reader) -> Option<Token>
 		continue;
 	}
 
-	parse_brace(r)
-		.or_else(|| parse_operator(r))
+	parse_syntax(r)
+		.or_else(|| parse_string(r))
 		.or_else(|| parse_piece(r))
 		.or_else(|| {
 			if r.empty() { 
@@ -338,8 +374,97 @@ fn tokenize(input: String) -> Vec<Token> {
 	tokens
 }
 
-fn parse(tokens: Vec<Token>) -> bool {
-	false
+fn parse_f(tokens: &mut &[Token]) -> Option<Expr>
+{
+	let t = &tokens[0];
+	*tokens = &tokens[1..];
+
+	match t {
+		Token::Integer(i) => {
+			print!(" {} ", i);
+			None
+		}
+		tt => panic!("unexpected {}", tt),
+	}
+}
+
+fn parse_term_p(tokens: &mut &[Token]) -> Option<Expr>
+{
+	let t = &tokens[0];
+
+	match t {
+		Token::OpMul => {
+			*tokens = &tokens[1..];
+			print!("*");
+			let f = parse_f(tokens);
+			let e = parse_term_p(tokens);
+			None
+		},
+		_ => None,
+	}
+}
+
+fn parse_term(tokens: &mut &[Token]) -> Option<Expr>
+{
+	print!("(");
+	let f = parse_f(tokens);
+	let e = parse_term_p(tokens);
+	print!(")");
+	None
+}
+
+fn parse_expr_p(tokens: &mut &[Token]) -> Option<Expr>
+{
+	let t = &tokens[0];
+
+	match t {
+		Token::OpAdd => {
+			*tokens = &tokens[1..];
+			print!("+");
+			let f = parse_term(tokens);
+			let e = parse_expr_p(tokens);
+			None
+		},
+		_ => None,
+	}
+}
+
+fn parse_expr(tokens: &mut &[Token]) -> Option<Expr>
+{
+	let t = &tokens[0];
+
+	match t {
+		Token::Semicolon => {
+			*tokens = &tokens[1..];
+			println!(" ; ");
+			None
+		},
+		_ => {
+			let f = parse_term(tokens);
+			let e = parse_expr_p(tokens);
+			None
+		}
+	}
+}
+
+fn parse(tokens: &[Token]) -> Vec<Expr>
+{
+	println!("parse tokens");
+
+	let mut mtokens = &tokens[..];
+
+	let mut exprs: Vec<Expr> = vec![];
+
+	while mtokens.len() > 0 {
+		parse_expr(&mut mtokens);
+	}
+/*
+	while let Some(e) = parse_expr(&mut mtokens) {
+		println!("have expression: {}", e);
+		exprs.push(e)
+	}
+*/
+	exprs
 }
 
 fn main() {
@@ -353,7 +478,7 @@ fn main() {
 
 		let tokens = tokenize(input);
     	println!("tokens '{:?}'", tokens);
-		let parsed = parse(tokens);
+		let parsed = parse(&tokens);
     } else {
     	println!("expected a file");
     }
