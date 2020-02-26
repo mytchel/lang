@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Token {
 	Lparen,
 	Rparen,
@@ -42,10 +42,16 @@ struct Reader<'a> {
 }
 
 enum Expr<'a> {
-	O(&'a Token, Box<Expr<'a>>, Box<Expr<'a>>),
-	B(Box<Expr<'a>>, Box<Expr<'a>>),
-	F(&'a Token),
-	N,
+	Brace(Box<Expr<'a>>, Option<Box<Expr<'a>>>),
+	Op(&'a Token, Box<Expr<'a>>, Option<Box<Expr<'a>>>),
+	Call(String, Vec<Expr<'a>>),
+	Item(&'a Token),
+}
+
+enum Stmt<'a> {
+	If(Box<Expr<'a>>, Box<Stmt<'a>>, Option<Box<Stmt<'a>>>),
+	Math(Box<Expr<'a>>),
+	List(&'a [Stmt<'a>]),
 }
 
 impl fmt::Display for Token {
@@ -90,10 +96,51 @@ impl fmt::Display for Token {
 impl<'a> fmt::Display for Expr<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let str = match self {
-			Expr::F(t) => format!("{}", t).to_string(),
-			Expr::O(o, e1, e2) => format!(" {} {}{}", o, e1, e2).to_string(),
-			Expr::B(e1, e2) => format!("({}{})", e1, e2).to_string(),
-			Expr::N => "".to_string(),
+			Expr::Brace(e1, oe2) => {
+				match oe2 {
+					Some(e2) => format!("({}{})", e1, e2).to_string(),
+					None => format!("{}", e1).to_string(),
+				}
+			},
+			Expr::Op(o, e1, oe2) => {
+				match oe2 {
+					Some(e2) => format!(" {} {}{}", o, e1, e2).to_string(),
+					None => format!(" {} {}", o, e1).to_string(),
+				}
+			},
+			Expr::Call(f, args) => {
+				let xs: Vec<String> = args
+					.iter()
+					.map(|x| x.to_string())
+					.collect();
+				format!("[call {} : {}]", f, xs.join(", ")).to_string()
+			},
+			Expr::Item(t) => format!("{}", t).to_string(),
+		};
+
+		write!(f, "{}", str)
+	}
+}
+
+impl<'a> fmt::Display for Stmt<'a> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let str = match self {
+			Stmt::If(cond, then, otherwise) => {
+				match otherwise {
+					Some(o) => format!("if ({}) then {} else {}", cond, then, o).to_string(),
+					None => format!("if ({}) then {}", cond, then).to_string(),
+				}
+			},
+			Stmt::Math(e) => {
+				format!("math {};", e).to_string()
+			},
+			Stmt::List(stmts) => {
+				let xs: Vec<String> = stmts
+					.iter()
+					.map(|x| x.to_string())
+					.collect();
+				format!("{{ {} }}", xs.join(" "))
+			},
 		};
 
 		write!(f, "{}", str)
@@ -313,7 +360,6 @@ fn parse_number(v: Vec<char>) -> Option<Token> {
 
 fn parse_piece(r: &mut Reader) -> Option<Token> {
 	let v = r.take_next();
-	println!("got {:?}", v);
 
 	if v.len() == 0 {
 		None
@@ -331,8 +377,6 @@ fn parse_piece(r: &mut Reader) -> Option<Token> {
 		let s: String = v.into_iter().collect();
 
 		/* TODO: make sure there are no .'s in it */
-
-		println!("symbol = {}", s);
 
 		match s.as_str() {
 			"true" => Some(Token::Bool(true)),
@@ -357,7 +401,6 @@ fn tokenize_single(r: &mut Reader) -> Option<Token>
 		.or_else(|| parse_piece(r))
 		.or_else(|| {
 			if r.empty() { 
-				println!("empty");
 				None 
 			}  else {
 				panic!("syntax error at index {} of {}", r.index, r.input.len())
@@ -371,8 +414,6 @@ fn tokenize(input: String) -> Vec<Token> {
 
 	let mut tokens: Vec<Token> = vec![];
 
-	println!("tokenize");
-
 	while let Some(x) = tokenize_single(&mut r) {
 		tokens.push(x)
 	}
@@ -382,13 +423,42 @@ fn tokenize(input: String) -> Vec<Token> {
 
 fn parse_match<'a>(expect: Token, tokens: &mut &'a [Token]) -> bool
 {
+	if tokens[0] == expect {
+		*tokens = &tokens[1..];
+		true
+	} else {
+		false
+	}
+}
+
+fn parse_call<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
+{
+	if tokens.len() < 2 {
+		return None;
+	}
+
 	let t = &tokens[0];
-	match t {
-		expect => {
-			*tokens = &tokens[1..];
-			true
+	let n = &tokens[1];
+
+	match (t, n) {
+		(Token::Symbol(s), Token::Lparen) => {
+			*tokens = &tokens[2..];
+			let mut arg_vec: Vec<Expr> = vec![];
+
+			while let Some(e) = parse_expr(tokens) {
+				arg_vec.push(e);
+				if !parse_match(Token::Comma, tokens) {
+					break;
+				}
+			}
+
+			if parse_match(Token::Rparen, tokens) {
+				Some(Expr::Call(s.to_string(), arg_vec))
+			} else {
+				panic!("expected )");
+			}
 		},
-		_ => false
+		_ => None,
 	}
 }
 
@@ -400,17 +470,25 @@ fn parse_f<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 		Token::Lparen => {
 			*tokens = &tokens[1..];
 			let r = parse_expr(tokens);
-			if !parse_match(Token::Rparen, tokens) {
-				panic!("expected )");
-			} else {
+			if parse_match(Token::Rparen, tokens) {
 				r
+			} else {
+				panic!("expected )");
 			}
 		},
-		Token::Integer(i) => {
+		Token::Symbol(s) => {
+			match parse_call(tokens) {
+				Some(c) => Some(c),
+				None => {
+					*tokens = &tokens[1..];
+					Some(Expr::Item(t))
+				},
+			}
+		},
+		Token::Integer(_) | Token::Float(_) => {
 			*tokens = &tokens[1..];
-			print!(" {} ", i);
-			Some(Expr::F(t))
-		}
+			Some(Expr::Item(t))
+		},
 		tt => panic!("unexpected {}", tt),
 	}
 }
@@ -420,15 +498,14 @@ fn parse_term_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 	let t = &tokens[0];
 
 	match t {
-		Token::OpMul => {
+		Token::OpMul | Token::OpDiv | Token::OpRem => {
 			*tokens = &tokens[1..];
-			print!("*");
 			let f = parse_f(tokens)?;
 			let e = match parse_term_p(tokens) {
-				Some(term) => term,
-				None => Expr::N,
+				Some(term) => Some(Box::new(term)),
+				None => None
 			};
-			Some(Expr::O(t, Box::new(f), Box::new(e)))
+			Some(Expr::Op(t, Box::new(f), e))
 		},
 		_ => None,
 	}
@@ -436,32 +513,26 @@ fn parse_term_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 
 fn parse_term<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 {
-	print!("(");
-	
-	let f = parse_f(tokens)?;;
-	let e = match parse_term_p(tokens) {
-		Some(term) => term,
-		None => Expr::N,
-	};
-
-	print!(")");
-	Some(Expr::B(Box::new(f), Box::new(e)))
+	let f = parse_f(tokens)?;
+	match parse_term_p(tokens) {
+		Some(term) => Some(Expr::Brace(Box::new(f), Some(Box::new(term)))),
+		None => Some(f),
+	}
 }
 
 fn parse_expr_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 {
 	let t = &tokens[0];
 	match t {
-		Token::OpAdd => {
+		Token::OpAdd | Token::OpSub => {
 			*tokens = &tokens[1..];
-			print!("+");
 			let f = parse_term(tokens)?;
 			let e = match parse_expr_p(tokens) {
-				Some(expr) => expr,
-				None => Expr::N,
+				Some(expr) => Some(Box::new(expr)),
+				None => None,
 			};
 
-			Some(Expr::O(t, Box::new(f), Box::new(e)))
+			Some(Expr::Op(t, Box::new(f), e))
 		},
 		_ => None,
 	}
@@ -469,20 +540,14 @@ fn parse_expr_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 
 fn parse_expr<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 {
-	if tokens.len() == 0 {
-		return None
-	}
-
 	let f = parse_term(tokens)?;
-	let e = match parse_expr_p(tokens) {
-		Some(expr) => expr,
-		None => Expr::N,
-	};
-	
-	Some(Expr::B(Box::new(f), Box::new(e)))
+	match parse_expr_p(tokens) {
+		Some(expr) => Some(Expr::Brace(Box::new(f), Some(Box::new(expr)))),
+		None => Some(f),
+	}
 }
 
-fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
+fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 {
 	if tokens.len() == 0 {
 		return None
@@ -491,32 +556,31 @@ fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 	let r = parse_expr(tokens);
 
 	if !parse_match(Token::Semicolon, tokens) {
-		panic!("expected )");
-	} else {
-		r
+		panic!("expected ;");
+	} 
+
+	match r {
+		Some(expr) => Some(Stmt::Math(Box::new(expr))),
+		None => None,
 	}
 }
 
-fn parse<'a>(tokens: &'a [Token]) -> Vec<Expr<'a>>
+fn parse<'a>(tokens: &'a [Token]) -> Vec<Stmt<'a>>
 {
-	println!("parse tokens");
-
 	let mut mtokens = &tokens[..];
 
-	let mut exprs: Vec<Expr> = vec![];
+	let mut stmts: Vec<Stmt> = vec![];
 
 	while let Some(e) = parse_stmt(&mut mtokens) {
-		println!("have expression: {}", e);
-		exprs.push(e)
+		println!("have stmt: {}", e);
+		stmts.push(e)
 	}
 
-	exprs
+	stmts
 }
 
 fn main() {
 	let args = env::args().collect::<Vec<_>>();
-
-    println!("Hello, world!");
 
     if args.len() == 2 {
     	let path = &args[1];
@@ -524,7 +588,7 @@ fn main() {
 
 		let tokens = tokenize(input);
     	println!("tokens '{:?}'", tokens);
-		let parsed = parse(&tokens);
+		let _parsed = parse(&tokens);
     } else {
     	println!("expected a file");
     }
