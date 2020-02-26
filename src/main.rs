@@ -10,6 +10,7 @@ enum Token {
 	Rbrace,
 	Lsquare,
 	Rsquare,
+	Dot,
 	Comma,
 	Semicolon,
 	Colon,
@@ -34,6 +35,8 @@ enum Token {
 	Bool(bool),
 	String(String),
 	Symbol(String),
+	If,
+	Else,
 }
 
 struct Reader<'a> {
@@ -41,6 +44,7 @@ struct Reader<'a> {
 	index: usize,
 }
 
+#[derive(Debug)]
 enum Expr<'a> {
 	Brace(Box<Expr<'a>>, Option<Box<Expr<'a>>>),
 	Op(&'a Token, Box<Expr<'a>>, Option<Box<Expr<'a>>>),
@@ -48,10 +52,11 @@ enum Expr<'a> {
 	Item(&'a Token),
 }
 
+#[derive(Debug)]
 enum Stmt<'a> {
 	If(Box<Expr<'a>>, Box<Stmt<'a>>, Option<Box<Stmt<'a>>>),
 	Math(Box<Expr<'a>>),
-	List(&'a [Stmt<'a>]),
+	List(Vec<Stmt<'a>>),
 }
 
 impl fmt::Display for Token {
@@ -65,6 +70,7 @@ impl fmt::Display for Token {
 			Token::Rsquare => "]".to_string(),
 			Token::Semicolon => ";".to_string(),
 			Token::Colon => ":".to_string(),
+			Token::Dot => ".".to_string(),
 			Token::Comma => ",".to_string(),
 			Token::Ref => "&".to_string(),
 			Token::Pipe => "|".to_string(),
@@ -87,6 +93,8 @@ impl fmt::Display for Token {
 			Token::Bool(i) => i.to_string(),
 			Token::String(i) => i.clone(),
 			Token::Symbol(i) => i.clone(),
+			Token::If => "if".to_string(),
+			Token::Else => "else".to_string(),
 		};
 
 		write!(f, "{}", str)
@@ -254,6 +262,8 @@ fn parse_syntax(r: &mut Reader) -> Option<Token> {
 	} else if r.take_match("||") {
 		Some(Token::CompOr)
 
+	} else if r.take_match(".") {
+		Some(Token::Dot)
 	} else if r.take_match(";") {
 		Some(Token::Semicolon)
 	} else if r.take_match(":") {
@@ -373,7 +383,7 @@ fn parse_piece(r: &mut Reader) -> Option<Token> {
 	} else if v[0].is_digit(10) {
 		parse_number(v)
 
-	} else if v[0].is_alphabetic() || v[0] == '_' {
+	} else if v[0].is_alphanumeric() || v[0] == '_' {
 		let s: String = v.into_iter().collect();
 
 		/* TODO: make sure there are no .'s in it */
@@ -381,6 +391,8 @@ fn parse_piece(r: &mut Reader) -> Option<Token> {
 		match s.as_str() {
 			"true" => Some(Token::Bool(true)),
 			"false" => Some(Token::Bool(false)),
+			"if" => Some(Token::If),
+			"else" => Some(Token::Else),
 			_ => Some(Token::Symbol(s)),
 		}
 
@@ -423,7 +435,9 @@ fn tokenize(input: String) -> Vec<Token> {
 
 fn parse_match<'a>(expect: Token, tokens: &mut &'a [Token]) -> bool
 {
-	if tokens[0] == expect {
+	if tokens.len() == 0 {
+		false
+	} else if tokens[0] == expect {
 		*tokens = &tokens[1..];
 		true
 	} else {
@@ -476,7 +490,7 @@ fn parse_f<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 				panic!("expected )");
 			}
 		},
-		Token::Symbol(s) => {
+		Token::Symbol(_) => {
 			match parse_call(tokens) {
 				Some(c) => Some(c),
 				None => {
@@ -493,7 +507,7 @@ fn parse_f<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 	}
 }
 
-fn parse_term_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
+fn parse_expr_term_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 {
 	let t = &tokens[0];
 
@@ -501,7 +515,7 @@ fn parse_term_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 		Token::OpMul | Token::OpDiv | Token::OpRem => {
 			*tokens = &tokens[1..];
 			let f = parse_f(tokens)?;
-			let e = match parse_term_p(tokens) {
+			let e = match parse_expr_term_p(tokens) {
 				Some(term) => Some(Box::new(term)),
 				None => None
 			};
@@ -511,10 +525,10 @@ fn parse_term_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 	}
 }
 
-fn parse_term<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
+fn parse_expr_term<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 {
 	let f = parse_f(tokens)?;
-	match parse_term_p(tokens) {
+	match parse_expr_term_p(tokens) {
 		Some(term) => Some(Expr::Brace(Box::new(f), Some(Box::new(term)))),
 		None => Some(f),
 	}
@@ -526,7 +540,7 @@ fn parse_expr_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 	match t {
 		Token::OpAdd | Token::OpSub => {
 			*tokens = &tokens[1..];
-			let f = parse_term(tokens)?;
+			let f = parse_expr_term(tokens)?;
 			let e = match parse_expr_p(tokens) {
 				Some(expr) => Some(Box::new(expr)),
 				None => None,
@@ -540,11 +554,49 @@ fn parse_expr_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 
 fn parse_expr<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 {
-	let f = parse_term(tokens)?;
+	let f = parse_expr_term(tokens)?;
 	match parse_expr_p(tokens) {
 		Some(expr) => Some(Expr::Brace(Box::new(f), Some(Box::new(expr)))),
 		None => Some(f),
 	}
+}
+
+fn parse_stmt_expr<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+{
+	let e = match parse_expr(tokens) {
+		Some(expr) => Some(Stmt::Math(Box::new(expr))),
+		None => return None,
+	};
+
+	if !parse_match(Token::Semicolon, tokens) {
+		panic!("expected ;");
+	}
+
+	e
+}
+
+fn parse_stmt_if<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+{
+	if tokens[0] != Token::If {
+		return None;
+	}
+
+	println!("have if");
+
+	*tokens = &tokens[1..];
+
+	let cond = parse_expr(tokens)?;
+	let then = parse_stmts(tokens)?;
+
+	let otherwise = 
+		if tokens.len() > 0 && tokens[0] == Token::Else {
+			*tokens = &tokens[1..];
+			Some(Box::new(parse_stmts(tokens)?))
+		} else {
+			None
+		};
+
+	Some(Stmt::If(Box::new(cond), Box::new(then), otherwise))
 }
 
 fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
@@ -553,16 +605,35 @@ fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 		return None
 	}
 
-	let r = parse_expr(tokens);
+	parse_stmt_if(tokens)
+		.or_else(|| parse_stmt_expr(tokens))
+}
 
-	if !parse_match(Token::Semicolon, tokens) {
-		panic!("expected ;");
-	} 
+fn parse_stmts<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+{
+	let mut stmts: Vec<Stmt> = vec![];
 
-	match r {
-		Some(expr) => Some(Stmt::Math(Box::new(expr))),
-		None => None,
+	if !parse_match(Token::Lbrace, tokens) {
+		panic!("expected {");
 	}
+
+	while let Some(e) = parse_stmt(tokens) {
+		println!("have stmt: {}", e);
+		stmts.push(e);
+		println!("next token is {}", tokens[0]);
+		if tokens[0] == Token::Rbrace {
+			println!("stop");
+			break;
+		}
+	}
+
+	println!("check for brace");
+	if !parse_match(Token::Rbrace, tokens) {
+		panic!("expected }");
+	}
+
+	println!("got stmts {:?}", &stmts);
+	Some(Stmt::List(stmts))
 }
 
 fn parse<'a>(tokens: &'a [Token]) -> Vec<Stmt<'a>>
