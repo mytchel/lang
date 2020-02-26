@@ -33,3 +33,17 @@ if (4 + 9) {
 	12 * 44 + (9 - test(hello));
 }
 
+if 2 {
+	then(this);
+	4 + 21;
+} else {
+	2 * (11 + 9);
+	this_other(thing);
+}
+
+
+{
+	what(about(this) + 4);
+	422 * 11 - 9;
+}
+

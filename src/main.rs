@@ -55,7 +55,7 @@ enum Expr<'a> {
 #[derive(Debug)]
 enum Stmt<'a> {
 	If(Box<Expr<'a>>, Box<Stmt<'a>>, Option<Box<Stmt<'a>>>),
-	Math(Box<Expr<'a>>),
+	Expr(Box<Expr<'a>>),
 	List(Vec<Stmt<'a>>),
 }
 
@@ -139,8 +139,8 @@ impl<'a> fmt::Display for Stmt<'a> {
 					None => format!("if ({}) then {}", cond, then).to_string(),
 				}
 			},
-			Stmt::Math(e) => {
-				format!("math {};", e).to_string()
+			Stmt::Expr(e) => {
+				format!("expr {};", e).to_string()
 			},
 			Stmt::List(stmts) => {
 				let xs: Vec<String> = stmts
@@ -564,7 +564,7 @@ fn parse_expr<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 fn parse_stmt_expr<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 {
 	let e = match parse_expr(tokens) {
-		Some(expr) => Some(Stmt::Math(Box::new(expr))),
+		Some(expr) => Some(Stmt::Expr(Box::new(expr))),
 		None => return None,
 	};
 
@@ -585,18 +585,50 @@ fn parse_stmt_if<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 
 	*tokens = &tokens[1..];
 
-	let cond = parse_expr(tokens)?;
-	let then = parse_stmts(tokens)?;
+	let cond = match parse_expr(tokens) {
+		None => panic!("expected expression"),
+		Some(e) => e,
+	};
+	
+	let then = match parse_stmts(tokens) {
+		None => panic!("expected statements"),
+		Some(s) => s,
+	};
 
 	let otherwise = 
 		if tokens.len() > 0 && tokens[0] == Token::Else {
 			*tokens = &tokens[1..];
-			Some(Box::new(parse_stmts(tokens)?))
+			match parse_stmts(tokens) {
+				None => panic!("expected statements"),
+				Some(s) => Some(Box::new(s)),
+			}
 		} else {
 			None
 		};
 
 	Some(Stmt::If(Box::new(cond), Box::new(then), otherwise))
+}
+
+fn parse_stmts<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+{
+	let mut stmts: Vec<Stmt> = vec![];
+
+	if !parse_match(Token::Lbrace, tokens) {
+		return None;
+	}
+
+	while let Some(e) = parse_stmt(tokens) {
+		stmts.push(e);
+		if tokens[0] == Token::Rbrace {
+			break;
+		}
+	}
+
+	if !parse_match(Token::Rbrace, tokens) {
+		panic!("expected }");
+	}
+
+	Some(Stmt::List(stmts))
 }
 
 fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
@@ -606,34 +638,8 @@ fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 	}
 
 	parse_stmt_if(tokens)
+		.or_else(|| parse_stmts(tokens))
 		.or_else(|| parse_stmt_expr(tokens))
-}
-
-fn parse_stmts<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
-{
-	let mut stmts: Vec<Stmt> = vec![];
-
-	if !parse_match(Token::Lbrace, tokens) {
-		panic!("expected {");
-	}
-
-	while let Some(e) = parse_stmt(tokens) {
-		println!("have stmt: {}", e);
-		stmts.push(e);
-		println!("next token is {}", tokens[0]);
-		if tokens[0] == Token::Rbrace {
-			println!("stop");
-			break;
-		}
-	}
-
-	println!("check for brace");
-	if !parse_match(Token::Rbrace, tokens) {
-		panic!("expected }");
-	}
-
-	println!("got stmts {:?}", &stmts);
-	Some(Stmt::List(stmts))
 }
 
 fn parse<'a>(tokens: &'a [Token]) -> Vec<Stmt<'a>>
