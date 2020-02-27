@@ -59,6 +59,12 @@ enum Stmt<'a> {
 	List(Vec<Stmt<'a>>),
 }
 
+struct Op {
+	op: Token,
+	arg1: Token,
+	arg2: Option<Token>
+}
+
 impl fmt::Display for Token {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let str = match self {
@@ -112,8 +118,8 @@ impl<'a> fmt::Display for Expr<'a> {
 			},
 			Expr::Op(o, e1, oe2) => {
 				match oe2 {
-					Some(e2) => format!(" {} {}{}", o, e1, e2).to_string(),
-					None => format!(" {} {}", o, e1).to_string(),
+					Some(e2) => format!(" ({} {}{})", o, e1, e2).to_string(),
+					None => format!(" ({} {})", o, e1).to_string(),
 				}
 			},
 			Expr::Call(f, args) => {
@@ -147,7 +153,7 @@ impl<'a> fmt::Display for Stmt<'a> {
 					.iter()
 					.map(|x| x.to_string())
 					.collect();
-				format!("{{ {} }}", xs.join(" "))
+				format!("{{\n{}\n}}", xs.join("\n"))
 			},
 		};
 
@@ -642,7 +648,7 @@ fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 		.or_else(|| parse_stmt_expr(tokens))
 }
 
-fn parse<'a>(tokens: &'a [Token]) -> Vec<Stmt<'a>>
+fn parse<'a>(tokens: &'a [Token]) -> Stmt<'a>
 {
 	let mut mtokens = &tokens[..];
 
@@ -653,7 +659,57 @@ fn parse<'a>(tokens: &'a [Token]) -> Vec<Stmt<'a>>
 		stmts.push(e)
 	}
 
-	stmts
+	Stmt::List(stmts)
+}
+
+fn assemble_stmt_if(cond: Box<Expr>, 
+		then: Box<Stmt>, 
+		otherwise: Option<Box<Stmt>>) -> Vec<Op>
+{
+	let mut ops: Vec<Op> = vec![];
+	
+	println!("assemble if");
+
+	ops
+}
+
+fn assemble_stmt_expr(e: Box<Expr>) -> Vec<Op>
+{
+	let mut ops: Vec<Op> = vec![];
+
+	println!("assemble expr");
+
+	ops
+}
+
+fn assemble_stmt_list(l: Vec<Stmt>) -> Vec<Op>
+{
+	let mut ops: Vec<Op> = vec![];
+	
+	println!("assemble list");
+
+	for s in l {
+		let mut sub_ops = assemble_stmt(s);
+		ops.append(&mut sub_ops);
+	}
+
+	ops
+}
+
+fn assemble_stmt(s: Stmt) -> Vec<Op>
+{
+	println!("assemble");
+
+	let mut ops: Vec<Op> = vec![];
+
+	match s {
+		Stmt::If(cond, then, otherwise) =>
+			assemble_stmt_if(cond, then, otherwise),
+		Stmt::Expr(e) =>
+			assemble_stmt_expr(e),
+		Stmt::List(l) => 
+			assemble_stmt_list(l),
+	}
 }
 
 fn main() {
@@ -664,8 +720,10 @@ fn main() {
     	let input = fs::read_to_string(path).expect("cant read file");
 
 		let tokens = tokenize(input);
-    	println!("tokens '{:?}'", tokens);
-		let _parsed = parse(&tokens);
+    	println!("tokens {:?}", tokens);
+		let parsed = parse(&tokens);
+    	println!("stmts {}", parsed);
+		let ops = assemble_stmt(parsed);
     } else {
     	println!("expected a file");
     }
