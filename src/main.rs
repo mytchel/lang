@@ -1,9 +1,11 @@
 use std::env;
 use std::fs;
+
+mod lexer {
 use std::fmt;
 
 #[derive(Debug, PartialEq)]
-enum Token {
+pub enum Token {
 	Lparen,
 	Rparen,
 	Lbrace,
@@ -44,27 +46,6 @@ struct Reader<'a> {
 	index: usize,
 }
 
-#[derive(Debug)]
-enum Expr<'a> {
-	Op(&'a Token, Box<Expr<'a>>, Option<Box<Expr<'a>>>),
-	Start(Box<Expr<'a>>, Option<Box<Expr<'a>>>),
-	Call(String, Vec<Expr<'a>>),
-	Item(&'a Token),
-}
-
-#[derive(Debug)]
-enum Stmt<'a> {
-	If(Box<Expr<'a>>, Box<Stmt<'a>>, Option<Box<Stmt<'a>>>),
-	Expr(Box<Expr<'a>>),
-	List(Vec<Stmt<'a>>),
-}
-
-struct Op {
-	op: Token,
-	arg1: Token,
-	arg2: Option<Token>
-}
-
 impl fmt::Display for Token {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let str = match self {
@@ -101,64 +82,6 @@ impl fmt::Display for Token {
 			Token::Symbol(i) => i.clone(),
 			Token::If => "if".to_string(),
 			Token::Else => "else".to_string(),
-		};
-
-		write!(f, "{}", str)
-	}
-}
-
-impl<'a> fmt::Display for Expr<'a> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let str = match self {
-			Expr::Start(v, next) => {
-				match next {
-					Some(n) =>
-						format!("[{} {}]", v, n).to_string(),
-					None => 
-						format!("[{}]", v).to_string(),
-				}
-			},
-			Expr::Op(o, v, next) => {
-				match next {
-					Some(n) =>
-						format!("({} {} {})", o, v, n).to_string(),
-					None => 
-						format!("({} {})", o, v).to_string(),
-				}
-			},
-			Expr::Call(f, args) => {
-				let xs: Vec<String> = args
-					.iter()
-					.map(|x| x.to_string())
-					.collect();
-				format!("[call {} : {}]", f, xs.join(", ")).to_string()
-			},
-			Expr::Item(t) => format!("{}", t).to_string(),
-		};
-
-		write!(f, "{}", str)
-	}
-}
-
-impl<'a> fmt::Display for Stmt<'a> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let str = match self {
-			Stmt::If(cond, then, otherwise) => {
-				match otherwise {
-					Some(o) => format!("if ({}) then {} else {}", cond, then, o).to_string(),
-					None => format!("if ({}) then {}", cond, then).to_string(),
-				}
-			},
-			Stmt::Expr(e) => {
-				format!("expr {};", e).to_string()
-			},
-			Stmt::List(stmts) => {
-				let xs: Vec<String> = stmts
-					.iter()
-					.map(|x| x.to_string())
-					.collect();
-				format!("{{\n{}\n}}", xs.join("\n"))
-			},
 		};
 
 		write!(f, "{}", str)
@@ -430,7 +353,7 @@ fn tokenize_single(r: &mut Reader) -> Option<Token>
 		})
 }
 
-fn tokenize(input: String) -> Vec<Token> {
+pub fn tokenize(input: String) -> Vec<Token> {
 	let v = input.chars().collect();
 	let mut r = Reader::new(&v);
 
@@ -441,6 +364,85 @@ fn tokenize(input: String) -> Vec<Token> {
 	}
 
 	tokens
+}
+}
+
+mod parser {
+
+use std::fmt;
+use crate::lexer::Token;
+
+#[derive(Debug)]
+pub enum Expr<'a> {
+	Op(&'a Token, Box<Expr<'a>>, Option<Box<Expr<'a>>>),
+	Start(Box<Expr<'a>>, Option<Box<Expr<'a>>>),
+	Call(String, Vec<Expr<'a>>),
+	Item(&'a Token),
+}
+
+#[derive(Debug)]
+pub enum Stmt<'a> {
+	If(Box<Expr<'a>>, Box<Stmt<'a>>, Option<Box<Stmt<'a>>>),
+	Expr(Box<Expr<'a>>),
+	List(Vec<Stmt<'a>>),
+}
+
+impl<'a> fmt::Display for Expr<'a> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let str = match self {
+			Expr::Start(v, next) => {
+				match next {
+					Some(n) =>
+						format!("[{} {}]", v, n).to_string(),
+					None => 
+						format!("[{}]", v).to_string(),
+				}
+			},
+			Expr::Op(o, v, next) => {
+				match next {
+					Some(n) =>
+						format!("({} {} {})", o, v, n).to_string(),
+					None => 
+						format!("({} {})", o, v).to_string(),
+				}
+			},
+			Expr::Call(f, args) => {
+				let xs: Vec<String> = args
+					.iter()
+					.map(|x| x.to_string())
+					.collect();
+				format!("[call {} : {}]", f, xs.join(", ")).to_string()
+			},
+			Expr::Item(t) => format!("{}", t).to_string(),
+		};
+
+		write!(f, "{}", str)
+	}
+}
+
+impl<'a> fmt::Display for Stmt<'a> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let str = match self {
+			Stmt::If(cond, then, otherwise) => {
+				match otherwise {
+					Some(o) => format!("if ({}) then {} else {}", cond, then, o).to_string(),
+					None => format!("if ({}) then {}", cond, then).to_string(),
+				}
+			},
+			Stmt::Expr(e) => {
+				format!("expr {};", e).to_string()
+			},
+			Stmt::List(stmts) => {
+				let xs: Vec<String> = stmts
+					.iter()
+					.map(|x| x.to_string())
+					.collect();
+				format!("{{\n{}\n}}", xs.join("\n"))
+			},
+		};
+
+		write!(f, "{}", str)
+	}
 }
 
 fn parse_match<'a>(expect: Token, tokens: &mut &'a [Token]) -> bool
@@ -651,7 +653,7 @@ fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 		.or_else(|| parse_stmt_expr(tokens))
 }
 
-fn parse<'a>(tokens: &'a [Token]) -> Stmt<'a>
+pub fn parse<'a>(tokens: &'a [Token]) -> Stmt<'a>
 {
 	let mut mtokens = &tokens[..];
 
@@ -663,23 +665,36 @@ fn parse<'a>(tokens: &'a [Token]) -> Stmt<'a>
 
 	Stmt::List(stmts)
 }
+}
 
-fn assemble_stmt_expr_h(mut i: usize, e: &Box<Expr>) -> usize
+mod assembler {
+
+use crate::lexer::Token;
+use crate::parser::Expr;
+use crate::parser::Stmt;
+
+pub struct Op {
+	op: Token,
+	arg1: Token,
+	arg2: Option<Token>
+}
+
+fn assemble_expr(mut i: usize, e: &Box<Expr>) -> usize
 {
 	match &**e {
 		Expr::Start(v, n) => {
-			i = assemble_stmt_expr_h(i, &v);
+			i = assemble_expr(i, &v);
 			if let Some(next) = n {
-				i = assemble_stmt_expr_h(i, &next);
+				i = assemble_expr(i, &next);
 			}
 		},
 		Expr::Op(o, v, n) => {
-			let value = assemble_stmt_expr_h(i, &v);
+			let value = assemble_expr(i, &v);
 			let ret = value + 1;
 			println!("i{} = i{} {} i{}", ret, i, o, value);
 			i = ret;
 			if let Some(next) = n {
-				i = assemble_stmt_expr_h(i, &next);
+				i = assemble_expr(i, &next);
 			}
 		},
 		Expr::Item(item) => {
@@ -695,7 +710,7 @@ fn assemble_stmt_expr_h(mut i: usize, e: &Box<Expr>) -> usize
 
 fn assemble_stmt_expr(e: Box<Expr>)
 {
-	let r = assemble_stmt_expr_h(0, &e);
+	let r = assemble_expr(0, &e);
 
 	println!("print i{}", r);
 }
@@ -707,7 +722,7 @@ fn assemble_stmt_list(l: Vec<Stmt>)
 	}
 }
 
-fn assemble_stmt(s: Stmt)
+pub fn assemble_stmt(s: Stmt)
 {
 	match s {
 		Stmt::If(cond, then, otherwise) =>
@@ -718,6 +733,7 @@ fn assemble_stmt(s: Stmt)
 			assemble_stmt_list(l),
 	}
 }
+}
 
 fn main() {
 	let args = env::args().collect::<Vec<_>>();
@@ -726,12 +742,12 @@ fn main() {
     	let path = &args[1];
     	let input = fs::read_to_string(path).expect("cant read file");
 
-		let tokens = tokenize(input);
+		let tokens = lexer::tokenize(input);
     	println!("tokens {:?}", tokens);
-		let parsed = parse(&tokens);
+		let parsed = parser::parse(&tokens);
     	println!("stmts {}", parsed);
 		//let ops = 
-		assemble_stmt(parsed);
+		assembler::assemble_stmt(parsed);
     } else {
     	println!("expected a file");
     }
