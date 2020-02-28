@@ -46,8 +46,8 @@ struct Reader<'a> {
 
 #[derive(Debug)]
 enum Expr<'a> {
-	Brace(Box<Expr<'a>>, Option<Box<Expr<'a>>>),
 	Op(&'a Token, Box<Expr<'a>>, Option<Box<Expr<'a>>>),
+	Start(Box<Expr<'a>>, Option<Box<Expr<'a>>>),
 	Call(String, Vec<Expr<'a>>),
 	Item(&'a Token),
 }
@@ -110,16 +110,20 @@ impl fmt::Display for Token {
 impl<'a> fmt::Display for Expr<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let str = match self {
-			Expr::Brace(e1, oe2) => {
-				match oe2 {
-					Some(e2) => format!("({}{})", e1, e2).to_string(),
-					None => format!("{}", e1).to_string(),
+			Expr::Start(v, next) => {
+				match next {
+					Some(n) =>
+						format!("[{} {}]", v, n).to_string(),
+					None => 
+						format!("[{}]", v).to_string(),
 				}
 			},
-			Expr::Op(o, e1, oe2) => {
-				match oe2 {
-					Some(e2) => format!(" ({} {}{})", o, e1, e2).to_string(),
-					None => format!(" ({} {})", o, e1).to_string(),
+			Expr::Op(o, v, next) => {
+				match next {
+					Some(n) =>
+						format!("({} {} {})", o, v, n).to_string(),
+					None => 
+						format!("({} {})", o, v).to_string(),
 				}
 			},
 			Expr::Call(f, args) => {
@@ -516,16 +520,15 @@ fn parse_f<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 fn parse_expr_term_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 {
 	let t = &tokens[0];
-
 	match t {
 		Token::OpMul | Token::OpDiv | Token::OpRem => {
 			*tokens = &tokens[1..];
-			let f = parse_f(tokens)?;
-			let e = match parse_expr_term_p(tokens) {
-				Some(term) => Some(Box::new(term)),
-				None => None
+			let v = parse_f(tokens)?;
+			let next = match parse_expr_term_p(tokens) {
+				Some(n) => Some(Box::new(n)),
+				None => None,
 			};
-			Some(Expr::Op(t, Box::new(f), e))
+			Some(Expr::Op(t, Box::new(v), next))
 		},
 		_ => None,
 	}
@@ -533,11 +536,13 @@ fn parse_expr_term_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 
 fn parse_expr_term<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 {
-	let f = parse_f(tokens)?;
-	match parse_expr_term_p(tokens) {
-		Some(term) => Some(Expr::Brace(Box::new(f), Some(Box::new(term)))),
-		None => Some(f),
-	}
+	let v = parse_f(tokens)?;
+	let n = match parse_expr_term_p(tokens) {
+		Some(nn) => Some(Box::new(nn)),
+		None => None,
+	};
+
+	Some(Expr::Start(Box::new(v), n))
 }
 
 fn parse_expr_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
@@ -546,13 +551,12 @@ fn parse_expr_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 	match t {
 		Token::OpAdd | Token::OpSub => {
 			*tokens = &tokens[1..];
-			let f = parse_expr_term(tokens)?;
-			let e = match parse_expr_p(tokens) {
-				Some(expr) => Some(Box::new(expr)),
+			let v = parse_expr_term(tokens)?;
+			let next = match parse_expr_p(tokens) {
+				Some(n) => Some(Box::new(n)),
 				None => None,
 			};
-
-			Some(Expr::Op(t, Box::new(f), e))
+			Some(Expr::Op(t, Box::new(v), next))
 		},
 		_ => None,
 	}
@@ -560,25 +564,24 @@ fn parse_expr_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 
 fn parse_expr<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 {
-	let f = parse_expr_term(tokens)?;
-	match parse_expr_p(tokens) {
-		Some(expr) => Some(Expr::Brace(Box::new(f), Some(Box::new(expr)))),
-		None => Some(f),
-	}
-}
+	let v = parse_expr_term(tokens)?;
+	let n = match parse_expr_p(tokens) {
+		Some(nn) => Some(Box::new(nn)),
+		None => None,
+	};
 
+	Some(Expr::Start(Box::new(v), n))
+}
+	
 fn parse_stmt_expr<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 {
-	let e = match parse_expr(tokens) {
-		Some(expr) => Some(Stmt::Expr(Box::new(expr))),
-		None => return None,
-	};
+	let expr = parse_expr(tokens)?;
 
 	if !parse_match(Token::Semicolon, tokens) {
 		panic!("expected ;");
 	}
 
-	e
+	Some(Stmt::Expr(Box::new(expr)))
 }
 
 fn parse_stmt_if<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
@@ -655,56 +658,60 @@ fn parse<'a>(tokens: &'a [Token]) -> Stmt<'a>
 	let mut stmts: Vec<Stmt> = vec![];
 
 	while let Some(e) = parse_stmt(&mut mtokens) {
-		println!("have stmt: {}", e);
 		stmts.push(e)
 	}
 
 	Stmt::List(stmts)
 }
 
-fn assemble_stmt_if(cond: Box<Expr>, 
-		then: Box<Stmt>, 
-		otherwise: Option<Box<Stmt>>) -> Vec<Op>
+fn assemble_stmt_expr_h(mut i: usize, e: &Box<Expr>) -> usize
 {
-	let mut ops: Vec<Op> = vec![];
-	
-	println!("assemble if");
-
-	ops
-}
-
-fn assemble_stmt_expr(e: Box<Expr>) -> Vec<Op>
-{
-	let mut ops: Vec<Op> = vec![];
-
-	println!("assemble expr");
-
-	ops
-}
-
-fn assemble_stmt_list(l: Vec<Stmt>) -> Vec<Op>
-{
-	let mut ops: Vec<Op> = vec![];
-	
-	println!("assemble list");
-
-	for s in l {
-		let mut sub_ops = assemble_stmt(s);
-		ops.append(&mut sub_ops);
+	match &**e {
+		Expr::Start(v, n) => {
+			i = assemble_stmt_expr_h(i, &v);
+			if let Some(next) = n {
+				i = assemble_stmt_expr_h(i, &next);
+			}
+		},
+		Expr::Op(o, v, n) => {
+			let value = assemble_stmt_expr_h(i, &v);
+			let ret = value + 1;
+			println!("i{} = i{} {} i{}", ret, i, o, value);
+			i = ret;
+			if let Some(next) = n {
+				i = assemble_stmt_expr_h(i, &next);
+			}
+		},
+		Expr::Item(item) => {
+			i = i + 1;
+			println!("i{} = {}", i, item);
+		},
+		Expr::Call(_, _) =>
+			panic!("cannot handle calls yet"),
 	}
 
-	ops
+	i
 }
 
-fn assemble_stmt(s: Stmt) -> Vec<Op>
+fn assemble_stmt_expr(e: Box<Expr>)
 {
-	println!("assemble");
+	let r = assemble_stmt_expr_h(0, &e);
 
-	let mut ops: Vec<Op> = vec![];
+	println!("print i{}", r);
+}
 
+fn assemble_stmt_list(l: Vec<Stmt>)
+{
+	for s in l {
+		assemble_stmt(s);
+	}
+}
+
+fn assemble_stmt(s: Stmt)
+{
 	match s {
 		Stmt::If(cond, then, otherwise) =>
-			assemble_stmt_if(cond, then, otherwise),
+			panic!("not done"),//assemble_stmt_if(cond, then, otherwise),
 		Stmt::Expr(e) =>
 			assemble_stmt_expr(e),
 		Stmt::List(l) => 
@@ -723,7 +730,8 @@ fn main() {
     	println!("tokens {:?}", tokens);
 		let parsed = parse(&tokens);
     	println!("stmts {}", parsed);
-		let ops = assemble_stmt(parsed);
+		//let ops = 
+		assemble_stmt(parsed);
     } else {
     	println!("expected a file");
     }
