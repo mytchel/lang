@@ -8,6 +8,8 @@ use crate::parser::Stmt;
 pub enum Op {
 	Print,
 	Load,
+	If,
+	Goto,
 	Add,
 	Sub,
 	Mul,
@@ -33,6 +35,8 @@ impl fmt::Display for Op {
 		let s = match self {
 			Op::Print  => "prt",
 			Op::Load   => "ldr",
+			Op::If     => "if ",
+			Op::Goto   => "go ",
 			Op::Add    => "add",
 			Op::Sub    => "sub",
 			Op::Mul    => "mul",
@@ -160,11 +164,44 @@ fn assemble_stmt_if(cond: Box<Expr>,
 	then: Box<Stmt>, otherwise: Option<Box<Stmt>>) 
 	-> Vec<Ir>
 {
+	let mut ir: Vec<Ir> = vec![];
+
 	let (cond_t, mut cond_ir) = assemble_expr(0, &cond);
 
-	let then_ir = assemble_stmt(*then);
+	let mut then_ir = assemble_stmt(*then);
 
-	vec![]
+	let mut other_ir = match otherwise {
+		Some(o) => assemble_stmt(*o),
+		None => vec![],
+	};
+
+	if other_ir.len() > 0 {
+		let skip_ir = Ir {
+			ret: None,
+			op: Op::Goto,
+			arg1: OpArg::Int(other_ir.len() as i64),
+			arg2: None
+		};
+
+		then_ir.push(skip_ir);
+	}
+		
+	/* if not true then jump forward by arg2 
+		instructions */
+
+	let if_ir = Ir { 
+		ret: None,
+		op: Op::If, 
+		arg1: OpArg::Temp(cond_t),
+		arg2: Some(OpArg::Int(then_ir.len() as i64)),
+	};
+
+	ir.append(&mut cond_ir);
+	ir.push(if_ir);
+	ir.append(&mut then_ir);
+	ir.append(&mut other_ir);
+	
+	ir
 }
 
 fn assemble_stmt_list(l: Vec<Stmt>) -> Vec<Ir>

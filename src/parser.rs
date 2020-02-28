@@ -221,8 +221,6 @@ fn parse_stmt_if<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 		return None;
 	}
 
-	println!("have if");
-
 	*tokens = &tokens[1..];
 
 	let cond = match parse_expr(tokens) {
