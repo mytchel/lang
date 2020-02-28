@@ -17,7 +17,7 @@ fn main() {
 		let parsed = parser::parse(&tokens);
     	println!("stmts {}", parsed);
 		//let ops = 
-		assembler::assemble_stmt(parsed);
+		assembler::assemble(parsed);
     } else {
     	println!("expected a file");
     }

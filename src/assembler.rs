@@ -1,65 +1,200 @@
+use std::fmt;
+
 use crate::lexer::Token;
 use crate::parser::Expr;
 use crate::parser::Stmt;
 
-pub struct Op {
-	op: Token,
-	arg1: Token,
-	arg2: Option<Token>
+#[derive(Debug)]
+pub enum Op {
+	Print,
+	Load,
+	Add,
+	Sub,
+	Mul,
+	Div,
 }
 
-fn assemble_expr(mut i: usize, e: &Box<Expr>) -> usize
+#[derive(Debug)]
+pub enum OpArg {
+	Int(i64),
+	Temp(usize),
+}
+
+#[derive(Debug)]
+pub struct Ir {
+	ret: Option<OpArg>,
+	op: Op,
+	arg1: OpArg,
+	arg2: Option<OpArg>
+}
+
+impl fmt::Display for Op {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let s = match self {
+			Op::Print  => "prt",
+			Op::Load   => "ldr",
+			Op::Add    => "add",
+			Op::Sub    => "sub",
+			Op::Mul    => "mul",
+			Op::Div    => "div",
+		};
+
+		write!(f, "{}", s)
+	}
+}
+
+impl fmt::Display for OpArg {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let s = match self {
+			OpArg::Int(i) => format!("{}", i).to_string(),
+			OpArg::Temp(i) => format!("t{}", i).to_string(),
+		};
+
+		write!(f, "{}", s)
+	}
+}
+
+impl fmt::Display for Ir {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let mut s = if let Some(arg2) = &self.arg2 {
+			format!("{} {} {}", self.op, self.arg1, arg2).to_string()
+		} else {
+			format!("{} {}", self.op, self.arg1).to_string()
+		};
+
+		if let Some(r) = &self.ret {
+			s = format!("{} = {}", s, r).to_string();
+		}
+		
+		write!(f, "{}", s)
+	}
+}
+
+fn convert_op(t: &Token) -> Op {
+	match t {
+		Token::OpAdd => Op::Add,
+		Token::OpSub => Op::Sub,
+		Token::OpMul => Op::Mul,
+		Token::OpDiv => Op::Div,
+		_ => panic!("op {} not supported", t),
+	}
+}
+
+fn convert_item(t: &Token) -> OpArg {
+	match t {
+		Token::Integer(i) => OpArg::Int(*i),
+		_ => panic!("item {} not supported", t),
+	}
+}
+
+fn assemble_expr(mut i: usize, e: &Box<Expr>) -> 
+	(usize, Vec<Ir>)
 {
 	match &**e {
 		Expr::Start(v, n) => {
-			i = assemble_expr(i, &v);
+			let (i, mut ir_a) = assemble_expr(i, &v);
 			if let Some(next) = n {
-				i = assemble_expr(i, &next);
+				let (i, mut ir_b) = assemble_expr(i, &next);
+				ir_a.append(&mut ir_b);
+				(i, ir_a)
+			} else {
+				(i, ir_a)
 			}
 		},
 		Expr::Op(o, v, n) => {
-			let value = assemble_expr(i, &v);
+			let (value, mut ir_a) = assemble_expr(i, &v);
 			let ret = value + 1;
-			println!("i{} = i{} {} i{}", ret, i, o, value);
+
+			let ir_b = Ir { 
+				ret: Some(OpArg::Temp(ret)),
+				op: convert_op(o), 
+				arg1: OpArg::Temp(i),
+				arg2: Some(OpArg::Temp(value)),
+			};
+
+			ir_a.push(ir_b);
+		
 			i = ret;
 			if let Some(next) = n {
-				i = assemble_expr(i, &next);
+				let (i, mut ir_c) = assemble_expr(i, &next);
+				ir_a.append(&mut ir_c);
+				(i, ir_a)
+			} else {
+				(i, ir_a)
 			}
 		},
 		Expr::Item(item) => {
 			i = i + 1;
-			println!("i{} = {}", i, item);
+
+			let ir = Ir { 
+				ret: Some(OpArg::Temp(i)),
+				op: Op::Load, 
+				arg1: convert_item(item),
+				arg2: None,
+			};
+
+			(i, vec![ir])
 		},
 		Expr::Call(_, _) =>
 			panic!("cannot handle calls yet"),
 	}
-
-	i
 }
 
-fn assemble_stmt_expr(e: Box<Expr>)
+fn assemble_stmt_expr(e: Box<Expr>) -> Vec<Ir>
 {
-	let r = assemble_expr(0, &e);
+	let (t, mut ir) = assemble_expr(0, &e);
 
-	println!("print i{}", r);
+	let print_ir = Ir { 
+		ret: None,
+		op: Op::Print, 
+		arg1: OpArg::Temp(t),
+		arg2: None,
+	};
+
+	ir.push(print_ir);
+
+	ir
 }
 
-fn assemble_stmt_list(l: Vec<Stmt>)
+fn assemble_stmt_if(cond: Box<Expr>, 
+	then: Box<Stmt>, otherwise: Option<Box<Stmt>>) 
+	-> Vec<Ir>
 {
+	let (cond_t, mut cond_ir) = assemble_expr(0, &cond);
+
+	let then_ir = assemble_stmt(*then);
+
+	vec![]
+}
+
+fn assemble_stmt_list(l: Vec<Stmt>) -> Vec<Ir>
+{
+	let mut v: Vec<Ir> = vec![];
+
 	for s in l {
-		assemble_stmt(s);
+		let mut vv = assemble_stmt(s);
+		v.append(&mut vv);
 	}
+
+	v
 }
 
-pub fn assemble_stmt(s: Stmt)
+fn assemble_stmt(s: Stmt) -> Vec<Ir>
 {
 	match s {
 		Stmt::If(cond, then, otherwise) =>
-			panic!("not done"),//assemble_stmt_if(cond, then, otherwise),
+			assemble_stmt_if(cond, then, otherwise),
 		Stmt::Expr(e) =>
 			assemble_stmt_expr(e),
 		Stmt::List(l) => 
 			assemble_stmt_list(l),
+	}
+}
+
+pub fn assemble(s: Stmt) {
+	let ir = assemble_stmt(s);
+	for i in ir {
+		println!("{}", i);
 	}
 }
 
