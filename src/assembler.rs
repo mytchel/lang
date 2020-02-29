@@ -24,10 +24,10 @@ pub enum OpArg {
 
 #[derive(Debug)]
 pub struct Ir {
-	ret: Option<OpArg>,
-	op: Op,
-	arg1: OpArg,
-	arg2: Option<OpArg>
+	pub ret: Option<OpArg>,
+	pub op: Op,
+	pub arg1: OpArg,
+	pub arg2: Option<OpArg>
 }
 
 impl fmt::Display for Op {
@@ -179,7 +179,7 @@ fn assemble_stmt_if(cond: Box<Expr>,
 		let skip_ir = Ir {
 			ret: None,
 			op: Op::Goto,
-			arg1: OpArg::Int(other_ir.len() as i64),
+			arg1: OpArg::Int((1 + other_ir.len()) as i64),
 			arg2: None
 		};
 
@@ -193,7 +193,7 @@ fn assemble_stmt_if(cond: Box<Expr>,
 		ret: None,
 		op: Op::If, 
 		arg1: OpArg::Temp(cond_t),
-		arg2: Some(OpArg::Int(then_ir.len() as i64)),
+		arg2: Some(OpArg::Int((1 + then_ir.len()) as i64)),
 	};
 
 	ir.append(&mut cond_ir);
@@ -228,10 +228,7 @@ fn assemble_stmt(s: Stmt) -> Vec<Ir>
 	}
 }
 
-pub fn assemble(s: Stmt) {
-	let ir = assemble_stmt(s);
-	for i in ir {
-		println!("{}", i);
-	}
+pub fn assemble(s: Stmt) -> Vec<Ir> {
+	assemble_stmt(s)
 }
 

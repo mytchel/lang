@@ -4,6 +4,7 @@ use std::fs;
 pub mod lexer;
 pub mod parser;
 pub mod assembler;
+pub mod evaluator;
 
 fn main() {
 	let args = env::args().collect::<Vec<_>>();
@@ -14,10 +15,17 @@ fn main() {
 
 		let tokens = lexer::tokenize(input);
     	println!("tokens {:?}", tokens);
+
 		let parsed = parser::parse(&tokens);
     	println!("stmts {}", parsed);
-		//let ops = 
-		assembler::assemble(parsed);
+
+		let ops = assembler::assemble(parsed);
+    	println!("ops:");
+    	for o in &ops {
+    		println!("{}", o);
+    	}
+
+		evaluator::eval(ops);
     } else {
     	println!("expected a file");
     }
