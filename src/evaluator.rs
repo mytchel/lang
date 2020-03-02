@@ -24,7 +24,12 @@ fn eval_op(temps: &mut HashMap<usize, i64>, o: &Ir) -> i64
 		Op::Load => {
 			let v = match o.arg1 {
 				OpArg::Int(i) => i,
-				_ => panic!("load expected int value"),
+				OpArg::Temp(t) => {
+					match temps.get(&t) {
+						Some(i) => *i,
+						None => panic!("temp {} not found", t),
+					}
+				},
 			};
 
 			match o.ret {

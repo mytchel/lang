@@ -11,6 +11,8 @@ pub enum Expr<'a> {
 
 #[derive(Debug)]
 pub enum Stmt<'a> {
+	Alloc(String, Box<Expr<'a>>),
+	Assign(String, Box<Expr<'a>>),
 	If(Box<Expr<'a>>, Box<Stmt<'a>>, Option<Box<Stmt<'a>>>),
 	Expr(Box<Expr<'a>>),
 	List(Vec<Stmt<'a>>),
@@ -22,9 +24,9 @@ impl<'a> fmt::Display for Expr<'a> {
 			Expr::Start(v, next) => {
 				match next {
 					Some(n) =>
-						format!("[{} {}]", v, n).to_string(),
+						format!("{} {}", v, n).to_string(),
 					None => 
-						format!("[{}]", v).to_string(),
+						format!("{}", v).to_string(),
 				}
 			},
 			Expr::Op(o, v, next) => {
@@ -52,6 +54,12 @@ impl<'a> fmt::Display for Expr<'a> {
 impl<'a> fmt::Display for Stmt<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let str = match self {
+			Stmt::Alloc(name, value) => {
+				format!("alloc {} = {}", name, value)
+			},
+			Stmt::Assign(name, value) => {
+				format!("assign {} = {}", name, value)
+			},
 			Stmt::If(cond, then, otherwise) => {
 				match otherwise {
 					Some(o) => format!("if ({}) then {} else {}", cond, then, o).to_string(),
@@ -247,6 +255,68 @@ fn parse_stmt_if<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 	Some(Stmt::If(Box::new(cond), Box::new(then), otherwise))
 }
 
+fn parse_stmt_assign<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+{
+	if tokens.len() < 2 {
+		return None;
+	}
+
+	let name = match &tokens[0] {
+		Token::Symbol(s) => s,
+		_ => return None,
+	};
+
+	if tokens[1] != Token::Assign {
+		return None;
+	}
+	
+	*tokens = &tokens[2..];
+
+	let value = match parse_expr(tokens) {
+		None => panic!("expected expression"),
+		Some(e) => e,
+	};
+
+	if !parse_match(Token::Semicolon, tokens) {
+		panic!("expected ;");
+	}
+
+	Some(Stmt::Assign(name.to_string(), Box::new(value)))
+}
+
+fn parse_stmt_let<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+{
+	if tokens.len() < 3 {
+		return None;
+	}
+
+	let name = match &tokens[0] {
+		Token::Symbol(s) => s,
+		_ => return None,
+	};
+
+	if tokens[1] != Token::Colon {
+		return None;
+	}
+	
+	if tokens[2] != Token::Assign {
+		return None;
+	}
+	
+	*tokens = &tokens[3..];
+
+	let value = match parse_expr(tokens) {
+		None => panic!("expected expression"),
+		Some(e) => e,
+	};
+
+	if !parse_match(Token::Semicolon, tokens) {
+		panic!("expected ;");
+	}
+
+	Some(Stmt::Alloc(name.to_string(), Box::new(value)))
+}
+	
 fn parse_stmts<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 {
 	let mut stmts: Vec<Stmt> = vec![];
@@ -275,8 +345,10 @@ fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 		return None
 	}
 
-	parse_stmt_if(tokens)
-		.or_else(|| parse_stmts(tokens))
+	parse_stmts(tokens)
+		.or_else(|| parse_stmt_if(tokens))
+		.or_else(|| parse_stmt_assign(tokens))
+		.or_else(|| parse_stmt_let(tokens))
 		.or_else(|| parse_stmt_expr(tokens))
 }
 
