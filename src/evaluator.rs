@@ -11,7 +11,7 @@ fn eval_op(temps: &mut HashMap<usize, i64>, o: &Ir) -> i64
 			match o.arg1 {
 				OpArg::Temp(t) => {
 					match temps.get(&t) {
-						Some(i) => println!("t{} = {}", t, *i),
+						Some(i) => println!("{}", *i),
 						None => panic!("temp {} not found", t),
 					}
 				},
@@ -51,8 +51,6 @@ fn eval_op(temps: &mut HashMap<usize, i64>, o: &Ir) -> i64
 				_ => panic!("if expected int arg2"),
 			};
 
-			println!("if {} else skip {}", cond, skip);
-
 			if cond != 0 {
 				1
 			} else {
@@ -61,7 +59,6 @@ fn eval_op(temps: &mut HashMap<usize, i64>, o: &Ir) -> i64
 		},
 		
 		Op::Goto => {
-			println!("goto {}", o.arg1);
 			match o.arg1 {
 				OpArg::Int(i) => i,
 				_ => panic!("goto expected int"),

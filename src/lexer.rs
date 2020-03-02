@@ -151,8 +151,13 @@ fn parse_comment(r: &mut Reader) -> bool {
 		r.take(0, |_, c| c != '\n');
 		true
 	} else if r.take_match("/*") {
-		while !r.take_match("*/") {
-			if r.take(1, |_, _| true).len() == 0 {
+		let mut l = 1;
+		while l > 0 {
+			if r.take_match("/*") {
+				l += 1;
+			} else if r.take_match("*/") {
+				l -= 1;
+			} else if r.take(1, |_, _| true).len() == 0 {
 				panic!("comment end not found!");
 			}
 		}
