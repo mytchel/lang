@@ -35,6 +35,7 @@ pub enum Token {
 	Symbol(String),
 	If,
 	Else,
+	Fn,
 }
 
 struct Reader<'a> {
@@ -78,6 +79,7 @@ impl fmt::Display for Token {
 			Token::Symbol(i) => i.clone(),
 			Token::If => "if".to_string(),
 			Token::Else => "else".to_string(),
+			Token::Fn => "fn".to_string(),
 		};
 
 		write!(f, "{}", str)
@@ -302,6 +304,10 @@ fn parse_number(v: Vec<char>) -> Option<Token> {
 		.ok()
 }
 
+fn parse_symbols(s: String) -> Option<Token> {
+	Some(Token::Symbol(s))
+}
+
 fn parse_piece(r: &mut Reader) -> Option<Token> {
 	let v = r.take_next();
 
@@ -327,7 +333,8 @@ fn parse_piece(r: &mut Reader) -> Option<Token> {
 			"false" => Some(Token::Bool(false)),
 			"if" => Some(Token::If),
 			"else" => Some(Token::Else),
-			_ => Some(Token::Symbol(s)),
+			"fn" => Some(Token::Fn),
+			_ => parse_symbols(s),
 		}
 
 	} else {

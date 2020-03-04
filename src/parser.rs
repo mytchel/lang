@@ -18,9 +18,18 @@ pub enum Stmt<'a> {
 	List(Vec<Stmt<'a>>),
 }
 
+pub struct Fn<'a> {
+	pub params: Vec<String>,
+	pub stmts: Stmt<'a>,
+}
+
+pub struct Prog<'a> {
+	pub funcs: Vec<(String, Fn<'a>)>,
+}
+
 impl<'a> fmt::Display for Expr<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let str = match self {
+		let s = match self {
 			Expr::Start(v, next) => {
 				match next {
 					Some(n) =>
@@ -47,13 +56,13 @@ impl<'a> fmt::Display for Expr<'a> {
 			Expr::Item(t) => format!("{}", t).to_string(),
 		};
 
-		write!(f, "{}", str)
+		write!(f, "{}", s)
 	}
 }
 
 impl<'a> fmt::Display for Stmt<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let str = match self {
+		let s = match self {
 			Stmt::Alloc(name, value) => {
 				format!("alloc {} = {}", name, value)
 			},
@@ -78,7 +87,36 @@ impl<'a> fmt::Display for Stmt<'a> {
 			},
 		};
 
-		write!(f, "{}", str)
+		write!(f, "{}", s)
+	}
+}
+
+impl<'a> fmt::Display for Fn<'a> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let param_s: Vec<String> = self.params
+					.iter()
+					.map(|x| x.to_string())
+					.collect();
+
+		let s = format!("fn ({}) {}", 
+			param_s.join(", "), self.stmts);
+
+		write!(f, "{}", s)
+	}
+}
+
+impl<'a> fmt::Display for Prog<'a> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let fn_s: Vec<String> = self.funcs
+					.iter()
+					.map(|(n, f)| format!("{} {}", 
+						n.to_string(), f))
+					.collect();
+
+		let s = format!("prog:\n{}",
+			fn_s.join("\n"));
+
+		write!(f, "{}", s)
 	}
 }
 
@@ -236,7 +274,7 @@ fn parse_stmt_if<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 		Some(e) => e,
 	};
 	
-	let then = match parse_stmts(tokens) {
+	let then = match parse_stmt_list(tokens) {
 		None => panic!("expected statements"),
 		Some(s) => s,
 	};
@@ -244,7 +282,7 @@ fn parse_stmt_if<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 	let otherwise = 
 		if tokens.len() > 0 && tokens[0] == Token::Else {
 			*tokens = &tokens[1..];
-			match parse_stmts(tokens) {
+			match parse_stmt_list(tokens) {
 				None => panic!("expected statements"),
 				Some(s) => Some(Box::new(s)),
 			}
@@ -317,7 +355,7 @@ fn parse_stmt_let<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 	Some(Stmt::Alloc(name.to_string(), Box::new(value)))
 }
 	
-fn parse_stmts<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+fn parse_stmt_list<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 {
 	let mut stmts: Vec<Stmt> = vec![];
 
@@ -345,23 +383,81 @@ fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 		return None
 	}
 
-	parse_stmts(tokens)
+	parse_stmt_list(tokens)
 		.or_else(|| parse_stmt_if(tokens))
 		.or_else(|| parse_stmt_assign(tokens))
 		.or_else(|| parse_stmt_let(tokens))
 		.or_else(|| parse_stmt_expr(tokens))
 }
 
-pub fn parse<'a>(tokens: &'a [Token]) -> Stmt<'a>
+fn parse_fn<'a>(tokens: &mut &'a [Token]) -> Option<(String, Fn<'a>)>
+{
+	if !parse_match(Token::Fn, tokens) {
+		return None;
+	}
+
+	if tokens.len() < 2 {
+		panic!("expected fn name");
+	}
+
+	let name = match &tokens[0] {
+		Token::Symbol(s) => s,
+		_ => panic!("expected fn name"),
+	};
+
+	*tokens = &tokens[1..];
+
+	println!("fn {}", name);
+
+	if !parse_match(Token::Lparen, tokens) {
+		panic!("unexpected {} expected (", &tokens[0]);
+	}
+
+	let mut param_vec: Vec<String> = vec![];
+
+	while tokens.len() > 1 {
+		let n = match &tokens[0] {
+			Token::Symbol(s) => s.to_string(),
+			Token::Rparen => break,
+			_ => panic!("expected param name"),
+		};
+
+		*tokens = &tokens[1..];
+
+		println!("param with name {}", n);
+		param_vec.push(n);
+		if !parse_match(Token::Comma, tokens) {
+			break;
+		}
+	}
+
+	if !parse_match(Token::Rparen, tokens) {
+		panic!("expected )");
+	}
+
+	let stmts = match parse_stmt_list(tokens) {
+		Some(t) => t,
+		None => panic!("function expected statement list"),
+	};
+
+	let f = Fn {
+		params: param_vec,
+		stmts: stmts,
+	};
+		
+	Some((name.to_string(), f))
+}
+
+pub fn parse<'a>(tokens: &'a [Token]) -> Prog<'a>
 {
 	let mut mtokens = &tokens[..];
 
-	let mut stmts: Vec<Stmt> = vec![];
+	let mut fns: Vec<(String, Fn)> = vec![];
 
-	while let Some(e) = parse_stmt(&mut mtokens) {
-		stmts.push(e)
+	while let Some(e) = parse_fn(&mut mtokens) {
+		fns.push(e)
 	}
 
-	Stmt::List(stmts)
+	Prog { funcs: fns }
 }
 

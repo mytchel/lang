@@ -4,9 +4,46 @@ use crate::assembler::Op;
 use crate::assembler::OpArg;
 use crate::assembler::Ir;
 
-fn eval_op(temps: &mut HashMap<usize, i64>, o: &Ir) -> i64 
+fn find_label(ops: &Vec<Ir>, label: &String) -> usize
 {
+	let mut i: usize = 0;
+
+	while i < ops.len() {
+		let o = &ops[i];
+		match o.op {
+			Op::Label => match &o.arg1 {
+				OpArg::String(s) => {
+					if s == label {
+						return i;
+					}
+				},
+				_ => panic!("label expected string arg"),
+			},
+			_ => (),
+		};
+
+		i = i + 1;
+	}
+
+	panic!("label {} not found!", label);
+}
+
+fn eval_op(temps: &mut HashMap<usize, i64>, i: usize, ops: &Vec<Ir>)
+	-> usize
+{
+	let o = &ops[i];
 	match o.op {
+		Op::Label => {
+			i + 1
+		},	
+			
+		Op::Goto => {
+			match &o.arg1 {
+				OpArg::String(s) => find_label(ops, &s),
+				_ => panic!("goto expected label"),
+			}
+		},
+
 		Op::Print => {
 			match o.arg1 {
 				OpArg::Temp(t) => {
@@ -18,7 +55,7 @@ fn eval_op(temps: &mut HashMap<usize, i64>, o: &Ir) -> i64
 				_ => panic!("print expected temp"),
 			};
 
-			1
+			i + 1
 		},
 		
 		Op::Load => {
@@ -30,6 +67,7 @@ fn eval_op(temps: &mut HashMap<usize, i64>, o: &Ir) -> i64
 						None => panic!("temp {} not found", t),
 					}
 				},
+				_ => panic!("load expected int or temp"),
 			};
 
 			match o.ret {
@@ -37,7 +75,7 @@ fn eval_op(temps: &mut HashMap<usize, i64>, o: &Ir) -> i64
 				_ => panic!("load expected temp"),
 			};
 
-			1
+			i + 1
 		},
 		
 		Op::If => {
@@ -51,25 +89,18 @@ fn eval_op(temps: &mut HashMap<usize, i64>, o: &Ir) -> i64
 				_ => panic!("if expected cond temp"),
 			};
 
-			let skip = match o.arg2 {
-				Some(OpArg::Int(i)) => i,
-				_ => panic!("if expected int arg2"),
+			let skip_index = match &o.arg2 {
+				Some(OpArg::String(s)) => find_label(ops, &s),
+				_ => panic!("if expected label arg2"),
 			};
 
 			if cond != 0 {
-				1
+				i + 1
 			} else {
-				skip
+				skip_index
 			}
 		},
-		
-		Op::Goto => {
-			match o.arg1 {
-				OpArg::Int(i) => i,
-				_ => panic!("goto expected int"),
-			}
-		},
-		
+	
 		Op::Add | Op::Sub | Op::Mul | Op::Div => {
 			let a = match o.arg1 {
 				OpArg::Int(i) => i,
@@ -79,6 +110,7 @@ fn eval_op(temps: &mut HashMap<usize, i64>, o: &Ir) -> i64
 						None => panic!("temp {} not found", t),
 					}
 				},
+				_ => panic!("math expected int or temp"),
 			};
 
 			let b = match o.arg2 {
@@ -107,19 +139,19 @@ fn eval_op(temps: &mut HashMap<usize, i64>, o: &Ir) -> i64
 				_ => panic!("load expected temp"),
 			};
 
-			1
+			i + 1
 		},
 	}
 }
 
 pub fn eval(ops: Vec<Ir>) 
 {
-	let mut i: i64 = 0;
+	let mut i: usize = 0;
 
 	let mut temps = HashMap::new();
 
-	while (i as usize) < ops.len() {
-		i += eval_op(&mut temps, &ops[i as usize]);
+	while i < ops.len() {
+		i = eval_op(&mut temps, i, &ops);
 	}
 }
 

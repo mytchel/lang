@@ -17,7 +17,7 @@ fn main() {
     	println!("tokens {:?}", tokens);
 
 		let parsed = parser::parse(&tokens);
-    	println!("stmts {}", parsed);
+    	println!("prog {}", parsed);
 
 		let ops = assembler::assemble(parsed);
     	println!("ops:");
@@ -26,6 +26,7 @@ fn main() {
     	}
 
 		evaluator::eval(ops);
+
     } else {
     	println!("expected a file");
     }

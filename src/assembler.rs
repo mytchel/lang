@@ -3,13 +3,16 @@ use std::fmt;
 use crate::lexer::Token;
 use crate::parser::Expr;
 use crate::parser::Stmt;
+use crate::parser::Fn;
+use crate::parser::Prog;
 
 #[derive(Debug)]
 pub enum Op {
+	Label,
+	Goto,
 	Print,
 	Load,
 	If,
-	Goto,
 	Add,
 	Sub,
 	Mul,
@@ -20,6 +23,7 @@ pub enum Op {
 pub enum OpArg {
 	Int(i64),
 	Temp(usize),
+	String(String),
 }
 
 #[derive(Debug)]
@@ -32,16 +36,18 @@ pub struct Ir {
 
 pub struct Env<'a> {
 	vars: Vec<(String, usize)>,
+	generated_labels: usize,
 	outer: Option<&'a Env<'a>>,
 }
 
 impl fmt::Display for Op {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let s = match self {
+			Op::Label  => "lbl",
+			Op::Goto   => "go ",
 			Op::Print  => "prt",
 			Op::Load   => "ldr",
 			Op::If     => "if ",
-			Op::Goto   => "go ",
 			Op::Add    => "add",
 			Op::Sub    => "sub",
 			Op::Mul    => "mul",
@@ -57,6 +63,7 @@ impl fmt::Display for OpArg {
 		let s = match self {
 			OpArg::Int(i) => format!("{}", i).to_string(),
 			OpArg::Temp(i) => format!("t{}", i).to_string(),
+			OpArg::String(i) => format!("{}", i).to_string(),
 		};
 
 		write!(f, "{}", s)
@@ -65,16 +72,18 @@ impl fmt::Display for OpArg {
 
 impl fmt::Display for Ir {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let mut s = if let Some(arg2) = &self.arg2 {
-			format!("{} {} {}", self.op, self.arg1, arg2).to_string()
-		} else {
-			format!("{} {}", self.op, self.arg1).to_string()
-		};
-
-		if let Some(r) = &self.ret {
-			s = format!("{} = {}", s, r).to_string();
-		}
+		let mut s = format!("{} ", self.op).to_string();
 		
+		if let Some(r) = &self.ret {
+			s = format!("{}{}, ", s, r).to_string();
+		}
+			
+		s = format!("{}{}", s, self.arg1).to_string();
+		
+		if let Some(arg2) = &self.arg2 {
+			s = format!("{}, {}", s, arg2).to_string()
+		};
+			
 		write!(f, "{}", s)
 	}
 }
@@ -187,6 +196,21 @@ fn assemble_stmt_expr(env: &mut Env, t: usize,
 	(t, ir)
 }
 
+fn gen_label_name(env: &mut Env, n: String) -> String
+{
+	let i = env.generated_labels;
+	env.generated_labels += 1;
+
+	let mut s = "_".to_string();
+	let mut e: &Env = env;
+	while let Some(ee) = e.outer {
+		s = format!("{}_", s).to_string();
+		e = ee;
+	}
+
+	format!("{}{}_{}", s, n, i).to_string()
+}
+
 fn assemble_stmt_if(env: &mut Env, t: usize, 
 	cond: Box<Expr>, 
 	then: Box<Stmt>, 
@@ -204,25 +228,48 @@ fn assemble_stmt_if(env: &mut Env, t: usize,
 		None => (t, vec![]),
 	};
 
+	/* Generate this here so the numbers increment how I'd 
+	   expect them to. */
+	let label_name = gen_label_name(env, "then_end".to_string());
+
 	if other_ir.len() > 0 {
-		let skip_ir = Ir {
+		let label_name = gen_label_name(env, "else_end".to_string());
+
+		let other_end_label = Ir {
 			ret: None,
-			op: Op::Goto,
-			arg1: OpArg::Int((1 + other_ir.len()) as i64),
+			op: Op::Label,
+			arg1: OpArg::String(label_name.to_string()),
 			arg2: None
 		};
 
-		then_ir.push(skip_ir);
+		other_ir.push(other_end_label);
+
+		let skip_other_ir = Ir {
+			ret: None,
+			op: Op::Goto,
+			arg1: OpArg::String(label_name.to_string()),
+			arg2: None
+		};
+		
+		then_ir.push(skip_other_ir);
 	}
 
-	/* if not true then jump forward by arg2 
-		instructions */
+	let then_end_label = Ir {
+		ret: None,
+		op: Op::Label,
+		arg1: OpArg::String(label_name.to_string()),
+		arg2: None
+	};
+
+	then_ir.push(then_end_label);
+
+	/* if not true then jump to arg2 label */
 
 	let if_ir = Ir { 
 		ret: None,
 		op: Op::If, 
 		arg1: OpArg::Temp(cond_t),
-		arg2: Some(OpArg::Int((1 + then_ir.len()) as i64)),
+		arg2: Some(OpArg::String(label_name.to_string())),
 	};
 
 	ir.append(&mut cond_ir);
@@ -290,6 +337,7 @@ fn assemble_stmt_list(env: &mut Env, t: usize, l: Vec<Stmt>)
 
 	let mut n_env = Env { 
 		vars: vec![], 
+		generated_labels: 0,
 		outer: Some(env),
 	};
 
@@ -319,13 +367,51 @@ fn assemble_stmt(env: &mut Env, t: usize, s: Stmt) -> (usize, Vec<Ir>)
 	}
 }
 
-pub fn assemble(s: Stmt) -> Vec<Ir> {
+fn assemble_fn(env: &mut Env, name: String, f: Fn) -> Vec<Ir>
+{
+	let mut n_env = Env { 
+		vars: vec![], 
+		generated_labels: 0,
+		outer: Some(env),
+	};
+
+	let (t, mut ir) = assemble_stmt(&mut n_env, 0, f.stmts);
+
+	let fn_label = Ir {
+		ret: None,
+		op: Op::Label,
+		arg1: OpArg::String(name.to_string()),
+		arg2: None
+	};
+
+	ir.insert(0, fn_label);
+
+	ir
+}
+
+pub fn assemble(p: Prog) -> Vec<Ir> {
 	let mut env = Env { 
 		vars: vec![], 
+		generated_labels: 0,
 		outer: None 
 	};
 
-	let (_t, irs) = assemble_stmt(&mut env, 0, s);
+	let mut irs: Vec<Ir> = vec![];
+	
+	for (n, f) in p.funcs {
+		let mut i = assemble_fn(&mut env, n, f);
+		irs.append(&mut i);
+	}
+
+	let start = Ir {
+		ret: None,
+		op: Op::Goto,
+		arg1: OpArg::String("main".to_string()),
+		arg2: None
+	};
+	
+	irs.insert(0, start);
+
 	irs
 }
 
