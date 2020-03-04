@@ -12,7 +12,7 @@ fn find_label(ops: &Vec<Ir>, label: &String) -> usize
 		let o = &ops[i];
 		match o.op {
 			Op::Label => match &o.arg1 {
-				OpArg::String(s) => {
+				Some(OpArg::String(s)) => {
 					if s == label {
 						return i;
 					}
@@ -28,25 +28,89 @@ fn find_label(ops: &Vec<Ir>, label: &String) -> usize
 	panic!("label {} not found!", label);
 }
 
-fn eval_op(temps: &mut HashMap<usize, i64>, i: usize, ops: &Vec<Ir>)
+fn eval_op(ops: &Vec<Ir>,
+	i: usize,
+	temps: &mut HashMap<usize, i64>,
+	stack: &mut Vec<i64>)
 	-> usize
 {
 	let o = &ops[i];
 	match o.op {
+		Op::Exit => {
+			panic!("exit");
+		},
 		Op::Label => {
 			i + 1
 		},	
 			
 		Op::Goto => {
 			match &o.arg1 {
-				OpArg::String(s) => find_label(ops, &s),
+				Some(OpArg::String(s)) => find_label(ops, &s),
 				_ => panic!("goto expected label"),
 			}
 		},
 
+		Op::Call => {
+			match &o.arg1 {
+				Some(OpArg::String(s)) => {
+					match s.as_str() {
+						"print" => {
+							match temps.get(&1) {
+								Some(v) => {
+									println!("{}", v);
+									i + 1
+								},
+								None => panic!("print expected t1"),
+							}
+						},
+						_ => {
+							stack.push(i as i64 + 1);
+							find_label(ops, &s)
+						},
+					}
+				},
+				_ => panic!("call expected label"),
+			}
+		},
+
+		Op::Ret => {
+			match stack.pop() {
+				Some(i) => i as usize,
+				None => panic!("ret with empty stack"),
+			}
+		},
+
+		Op::Push => {
+			match o.arg1 {
+				Some(OpArg::Temp(t)) => {
+					match temps.get(&t) {
+						Some(i) => stack.push(*i),
+						None => panic!("temp {} not found", t),
+					}
+				},
+				_ => panic!("print expected temp"),
+			};
+
+				i + 1
+		},
+
+		Op::Pop => {
+			let v = match stack.pop() {
+				Some(i) => i,
+				_ => panic!("pop with empty stack"),
+			};
+
+			match o.ret {
+				Some(OpArg::Temp(t)) => temps.insert(t, v),
+				_ => panic!("pop expected temp"),
+			};
+
+			i + 1
+		},
+
 		Op::Print => {
 			match o.arg1 {
-				OpArg::Temp(t) => {
+				Some(OpArg::Temp(t)) => {
 					match temps.get(&t) {
 						Some(i) => println!("{}", *i),
 						None => panic!("temp {} not found", t),
@@ -60,8 +124,8 @@ fn eval_op(temps: &mut HashMap<usize, i64>, i: usize, ops: &Vec<Ir>)
 		
 		Op::Load => {
 			let v = match o.arg1 {
-				OpArg::Int(i) => i,
-				OpArg::Temp(t) => {
+				Some(OpArg::Int(i)) => i,
+				Some(OpArg::Temp(t)) => {
 					match temps.get(&t) {
 						Some(i) => *i,
 						None => panic!("temp {} not found", t),
@@ -80,7 +144,7 @@ fn eval_op(temps: &mut HashMap<usize, i64>, i: usize, ops: &Vec<Ir>)
 		
 		Op::If => {
 			let cond = match o.arg1 {
-				OpArg::Temp(t) => {
+				Some(OpArg::Temp(t)) => {
 					match temps.get(&t) {
 						Some(i) => *i,
 						None => panic!("temp {} not found", t),
@@ -103,8 +167,8 @@ fn eval_op(temps: &mut HashMap<usize, i64>, i: usize, ops: &Vec<Ir>)
 	
 		Op::Add | Op::Sub | Op::Mul | Op::Div => {
 			let a = match o.arg1 {
-				OpArg::Int(i) => i,
-				OpArg::Temp(t) => {
+				Some(OpArg::Int(i)) => i,
+				Some(OpArg::Temp(t)) => {
 					match temps.get(&t) {
 						Some(i) => *i,
 						None => panic!("temp {} not found", t),
@@ -149,9 +213,10 @@ pub fn eval(ops: Vec<Ir>)
 	let mut i: usize = 0;
 
 	let mut temps = HashMap::new();
+	let mut stack: Vec<i64> = vec![];
 
 	while i < ops.len() {
-		i = eval_op(&mut temps, i, &ops);
+		i = eval_op(&ops, i, &mut temps, &mut stack);
 	}
 }
 

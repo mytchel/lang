@@ -15,16 +15,20 @@ fn main() {
 
 		let tokens = lexer::tokenize(input);
     	println!("tokens {:?}", tokens);
+    	println!("");
 
 		let parsed = parser::parse(&tokens);
     	println!("prog {}", parsed);
+    	println!("");
 
 		let ops = assembler::assemble(parsed);
     	println!("ops:");
+    	println!("");
     	for o in &ops {
     		println!("{}", o);
     	}
 
+    	println!("");
 		evaluator::eval(ops);
 
     } else {

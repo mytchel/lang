@@ -4,56 +4,69 @@
  * a multi line comment
  * in fact.
   */
-/*
-fn double(x) {
+
+fn test(x) {
+	/* need to add return but for now
+	   all expressions return and the last
+	   one is used as the return for a block.
+	   This is wasting temporary variables though
+	   as you can see if you look through the output
+	   where each print is returning something which
+	   is being saved and the temp counter is incremented.
+	   */
 	x * 2;
 }
-*/
+
 fn main() {
-	10 - 4 + 2;
-	8;
-	3 * 3 + 2;
-	11;
-	3 + 3 * 3;
-	12;
-	10 * (4 - 2);
-	20;
+	print(10 - 4 + 2);
+	print(8);
+	print(1 + 2 + test(5) - 4);
+	print(9);
+
+	print(10 - 4 + 2);
+	print(8);
+	print(3 * 3 + 2);
+	print(11);
+	print(3 + 3 * 3);
+	print(12);
+	print(10 * (4 - 2));
+	print(20);
 
 	if (4 + 9) {
-		1;
+		print(1);
 	}
-	1;
+	print(1);
 
 	if 10 - 10 {
-		1;
+		print(1);
 	} else {
-		0;
+		print(0);
 	}
 
-	0;
+	print(0);
 
 	if 1 {
-		1;
+		print(1);
 	} else {
-		0;
+		print(0);
 	}
 
-	1;
+	print(1);
 
 	x := 42;
-	x + 4;
-	46;
+	print(x + 4);
+	print(46);
 	x = 12;
-	x + 3;
-	15;
+	print(x + 3);
+	print(15);
 	y := 8;
-	x + y;
-	20;
+	print(x + y);
+	print(20);
 
 	{
 		z := 10;
-		z + y + 4;
-		22;
+		print(z + y + 4);
+		print(22);
 	}
 
 	/* this should fail. which it currently does */
