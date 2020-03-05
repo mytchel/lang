@@ -5,7 +5,7 @@
  * in fact.
   */
 
-fn test(x) {
+fn double(x) {
 	/* need to add return but for now
 	   all expressions return and the last
 	   one is used as the return for a block.
@@ -17,11 +17,30 @@ fn test(x) {
 	x * 2;
 }
 
+/* this doesn't work yet 
+   need to make if and else labels
+   global.
+*/
+
+fn recursive(a, b) {
+	x := 2;
+	if a {
+		x = recursive(a - 1, b + 3);
+	} else {
+		x = b;
+	}
+
+	x;
+}
+
 fn main() {
 	print(10 - 4 + 2);
 	print(8);
-	print(1 + 2 + test(5) - 4);
+	print(1 + 2 + double(5) - 4);
 	print(9);
+
+	print(recursive(4, 1));
+	print(13);
 
 	print(10 - 4 + 2);
 	print(8);

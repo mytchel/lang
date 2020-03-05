@@ -140,9 +140,24 @@ fn convert_item(env: &Env, t: &Token) -> OpArg {
 fn assemble_call<'a>(env: &mut Env, i: usize, 
 	name: &String, args: &Vec<Expr<'a>>) -> (usize, Vec<Ir>)
 {
-	println!("call {}", name); 
-
 	let mut irs: Vec<Ir> = vec![];
+
+	let mut arg_i = i;
+	for a in args {
+		let (value, mut ir_e) = assemble_expr(env, arg_i, a);
+		irs.append(&mut ir_e);
+
+		arg_i = arg_i + 1;
+		
+		let ir = Ir { 
+			ret: Some(OpArg::Temp(arg_i)),
+			op: Op::Load, 
+			arg1: Some(OpArg::Temp(value)),
+			arg2: None,
+		};
+
+		irs.push(ir);
+	}
 
 	for j in 1..(i+1) {
 		let ir = Ir { 
@@ -155,17 +170,11 @@ fn assemble_call<'a>(env: &mut Env, i: usize,
 		irs.push(ir);
 	}
 
-	let mut arg_i = 0;
-	for a in args {
-		let (value, mut ir_e) = assemble_expr(env, arg_i, a);
-		irs.append(&mut ir_e);
-
-		arg_i = arg_i + 1;
-
+	for j in 1..(arg_i - i + 1) {
 		let ir = Ir { 
-			ret: Some(OpArg::Temp(arg_i)),
+			ret: Some(OpArg::Temp(j)),
 			op: Op::Load, 
-			arg1: Some(OpArg::Temp(value)),
+			arg1: Some(OpArg::Temp(j + i)),
 			arg2: None,
 		};
 

@@ -24,8 +24,10 @@ fn main() {
 		let ops = assembler::assemble(parsed);
     	println!("ops:");
     	println!("");
+    	let mut i = 0;
     	for o in &ops {
-    		println!("{}", o);
+    		println!("{}: {}", i, o);
+    		i += 1;
     	}
 
     	println!("");

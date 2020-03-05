@@ -28,6 +28,51 @@ fn find_label(ops: &Vec<Ir>, label: &String) -> usize
 	panic!("label {} not found!", label);
 }
 
+fn pretty_print_op(op: &Ir,
+	temps: &mut HashMap<usize, i64>,
+	_stack: &mut Vec<i64>)
+{
+	print!("{}", op.op);
+
+	if let Some(r) = &op.ret {
+		print!(" ");
+		print!("={}", r);
+	}
+
+	if let Some(a) = &op.arg1 {
+		print!(" ");
+		match a {
+			OpArg::Int(i) => print!("{}", i),
+			OpArg::Temp(t) => {
+				print!("t{}=", t);
+				match temps.get(&t) {
+					Some(v) => print!("{}", *v),
+					None => panic!("um"),
+				}
+			},
+			OpArg::String(s) => print!("'{}'", s),
+		}
+	}
+
+	if let Some(a) = &op.arg2 {
+		print!(" ");
+		match a {
+			OpArg::Int(i) => print!("{}", i),
+			OpArg::Temp(t) => {
+				print!("t{}=", t);
+				match temps.get(&t) {
+					Some(v) => print!("{}", *v),
+					None => panic!("um"),
+				}
+			},
+			OpArg::String(s) => print!("'{}'", s),
+		}
+	}
+
+	println!("");
+	std::thread::sleep(std::time::Duration::from_millis(100));
+}
+
 fn eval_op(ops: &Vec<Ir>,
 	i: usize,
 	temps: &mut HashMap<usize, i64>,
@@ -35,6 +80,9 @@ fn eval_op(ops: &Vec<Ir>,
 	-> usize
 {
 	let o = &ops[i];
+
+//	pretty_print_op(o, temps, stack);
+
 	match o.op {
 		Op::Exit => {
 			panic!("exit");
@@ -75,7 +123,7 @@ fn eval_op(ops: &Vec<Ir>,
 
 		Op::Ret => {
 			match stack.pop() {
-				Some(i) => i as usize,
+				Some(n) => n as usize,
 				None => panic!("ret with empty stack"),
 			}
 		},
