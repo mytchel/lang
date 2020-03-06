@@ -11,6 +11,7 @@ pub enum Expr<'a> {
 
 #[derive(Debug)]
 pub enum Stmt<'a> {
+	Return(Option<Box<Expr<'a>>>),
 	Alloc(String, Box<Expr<'a>>),
 	Assign(String, Box<Expr<'a>>),
 	If(Box<Expr<'a>>, Box<Stmt<'a>>, Option<Box<Stmt<'a>>>),
@@ -63,6 +64,12 @@ impl<'a> fmt::Display for Expr<'a> {
 impl<'a> fmt::Display for Stmt<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let s = match self {
+			Stmt::Return(value) => {
+				match value {
+					Some(v) => format!("ret {}", v),
+					None => format!("ret"),
+				}
+			},
 			Stmt::Alloc(name, value) => {
 				format!("alloc {} = {}", name, value)
 			},
@@ -354,6 +361,28 @@ fn parse_stmt_let<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 
 	Some(Stmt::Alloc(name.to_string(), Box::new(value)))
 }
+
+fn parse_stmt_return<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+{
+	if !parse_match(Token::Return, tokens) {
+		return None;
+	}
+
+	if tokens.len() < 1 {
+		return Some(Stmt::Return(None));
+	}
+
+	let e = match parse_expr(tokens) {
+		Some(ee) => Some(Box::new(ee)),
+		None => None,
+	};
+
+	if !parse_match(Token::Semicolon, tokens) {
+		panic!("expected ;");
+	}
+
+	return Some(Stmt::Return(e));
+}
 	
 fn parse_stmt_list<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 {
@@ -384,6 +413,7 @@ fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 	}
 
 	parse_stmt_list(tokens)
+		.or_else(|| parse_stmt_return(tokens))
 		.or_else(|| parse_stmt_if(tokens))
 		.or_else(|| parse_stmt_assign(tokens))
 		.or_else(|| parse_stmt_let(tokens))
@@ -407,8 +437,6 @@ fn parse_fn<'a>(tokens: &mut &'a [Token]) -> Option<(String, Fn<'a>)>
 
 	*tokens = &tokens[1..];
 
-	println!("fn {}", name);
-
 	if !parse_match(Token::Lparen, tokens) {
 		panic!("unexpected {} expected (", &tokens[0]);
 	}
@@ -424,7 +452,6 @@ fn parse_fn<'a>(tokens: &mut &'a [Token]) -> Option<(String, Fn<'a>)>
 
 		*tokens = &tokens[1..];
 
-		println!("param with name {}", n);
 		param_vec.push(n);
 		if !parse_match(Token::Comma, tokens) {
 			break;

@@ -271,6 +271,15 @@ fn assemble_expr(env: &mut Env, mut i: usize, e: &Expr) ->
 	}
 }
 
+fn assemble_stmt_expr(env: &mut Env, t: usize, 
+	expr: Box<Expr>) 
+	-> (usize, Vec<Ir>)
+{
+	let (_ret_t, ir) = assemble_expr(env, t, &expr);
+
+	(t, ir)
+}
+
 fn gen_label_name(env: &mut Env, n: String) -> String
 {
 	let i = env.generated_labels;
@@ -421,23 +430,37 @@ fn assemble_stmt_list(env: &mut Env, t: usize, l: Vec<Stmt>)
 		n_t = tt;
 	}
 
-	(n_t, v)
+	(t, v)
 }
 
-fn assemble_stmt(env: &mut Env, t: usize, s: Stmt) -> (usize, Vec<Ir>)
+fn assemble_stmt_return(env: &mut Env, t: usize,
+	expr: Option<Box<Expr>>)
+	-> (usize, Vec<Ir>)
 {
-	match s {
-		Stmt::Alloc(name, value) =>
-			assemble_stmt_alloc(env, t, name, value),
-		Stmt::Assign(name, value) =>
-			assemble_stmt_assign(env, t, name, value),
-		Stmt::If(cond, then, otherwise) =>
-			assemble_stmt_if(env, t, cond, then, otherwise),
-		Stmt::List(l) => 
-			assemble_stmt_list(env, t, l),
-		Stmt::Expr(e) =>
-			assemble_expr(env, t, &e),
-	}
+	let (value_t, mut ir) = match expr {
+		Some(e) => assemble_expr(env, t, &e),
+		None => (t, vec![]),
+	};
+
+	let ldr_ret = Ir {
+		ret: Some(OpArg::Temp(1)),
+		op: Op::Load,
+		arg1: Some(OpArg::Temp(value_t)),
+		arg2: None
+	};
+
+	ir.push(ldr_ret);
+
+	let ret = Ir {
+		ret: None,
+		op: Op::Ret,
+		arg1: None,
+		arg2: None
+	};
+
+	ir.push(ret);
+
+	(t, ir)
 }
 
 fn assemble_fn(env: &mut Env, name: String, f: Fn) -> Vec<Ir>
@@ -454,7 +477,7 @@ fn assemble_fn(env: &mut Env, name: String, f: Fn) -> Vec<Ir>
 		n_env.vars.push((param, p_t));
 	}
 
-	let (t, mut ir) = assemble_stmt(&mut n_env, p_t, f.stmts);
+	let (_t, mut ir) = assemble_stmt(&mut n_env, p_t, f.stmts);
 
 	let fn_label = Ir {
 		ret: None,
@@ -464,15 +487,6 @@ fn assemble_fn(env: &mut Env, name: String, f: Fn) -> Vec<Ir>
 	};
 
 	ir.insert(0, fn_label);
-
-	let ldr_ret = Ir {
-		ret: Some(OpArg::Temp(1)),
-		op: Op::Load,
-		arg1: Some(OpArg::Temp(t)),
-		arg2: None
-	};
-
-	ir.push(ldr_ret);
 
 	let ret = Ir {
 		ret: None,
@@ -484,6 +498,24 @@ fn assemble_fn(env: &mut Env, name: String, f: Fn) -> Vec<Ir>
 	ir.push(ret);
 
 	ir
+}
+
+fn assemble_stmt(env: &mut Env, t: usize, s: Stmt) -> (usize, Vec<Ir>)
+{
+	match s {
+		Stmt::Return(expr) =>
+			assemble_stmt_return(env, t, expr),
+		Stmt::Alloc(name, value) =>
+			assemble_stmt_alloc(env, t, name, value),
+		Stmt::Assign(name, value) =>
+			assemble_stmt_assign(env, t, name, value),
+		Stmt::If(cond, then, otherwise) =>
+			assemble_stmt_if(env, t, cond, then, otherwise),
+		Stmt::List(l) => 
+			assemble_stmt_list(env, t, l),
+		Stmt::Expr(e) =>
+			assemble_stmt_expr(env, t, e),
+	}
 }
 
 pub fn assemble(p: Prog) -> Vec<Ir> {

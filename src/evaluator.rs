@@ -85,7 +85,8 @@ fn eval_op(ops: &Vec<Ir>,
 
 	match o.op {
 		Op::Exit => {
-			panic!("exit");
+			std::process::exit(0);
+			i
 		},
 		Op::Label => {
 			i + 1

@@ -3,34 +3,19 @@
 /* so is this.
  * a multi line comment
  * in fact.
+ * /* nested are also ok. */
   */
 
 fn double(x) {
-	/* need to add return but for now
-	   all expressions return and the last
-	   one is used as the return for a block.
-	   This is wasting temporary variables though
-	   as you can see if you look through the output
-	   where each print is returning something which
-	   is being saved and the temp counter is incremented.
-	   */
-	x * 2;
+	return x * 2;
 }
 
-/* this doesn't work yet 
-   need to make if and else labels
-   global.
-*/
-
 fn recursive(a, b) {
-	x := 2;
 	if a {
-		x = recursive(a - 1, b + 3);
+		return recursive(a - 1, b + 3);
 	} else {
-		x = b;
+		return b;
 	}
-
-	x;
 }
 
 fn main() {
@@ -90,5 +75,6 @@ fn main() {
 
 	/* this should fail. which it currently does */
 	//z + x;
+
 }
 

@@ -14,8 +14,6 @@ fn main() {
     	let input = fs::read_to_string(path).expect("cant read file");
 
 		let tokens = lexer::tokenize(input);
-    	println!("tokens {:?}", tokens);
-    	println!("");
 
 		let parsed = parser::parse(&tokens);
     	println!("prog {}", parsed);

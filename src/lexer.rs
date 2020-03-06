@@ -36,6 +36,7 @@ pub enum Token {
 	If,
 	Else,
 	Fn,
+	Return,
 }
 
 struct Reader<'a> {
@@ -80,6 +81,7 @@ impl fmt::Display for Token {
 			Token::If => "if".to_string(),
 			Token::Else => "else".to_string(),
 			Token::Fn => "fn".to_string(),
+			Token::Return => "return".to_string(),
 		};
 
 		write!(f, "{}", str)
@@ -334,6 +336,7 @@ fn parse_piece(r: &mut Reader) -> Option<Token> {
 			"if" => Some(Token::If),
 			"else" => Some(Token::Else),
 			"fn" => Some(Token::Fn),
+			"return" => Some(Token::Return),
 			_ => parse_symbols(s),
 		}
 
