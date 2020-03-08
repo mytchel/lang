@@ -1,6 +1,7 @@
 use std::fmt;
 
 use crate::lexer::Token;
+use crate::parser::Type;
 use crate::parser::Expr;
 use crate::parser::Stmt;
 use crate::parser::Fn;
@@ -28,7 +29,7 @@ pub enum Op {
 pub enum OpArg {
 	Int(i64),
 	Temp(usize),
-	String(String),
+	Label(String),
 }
 
 #[derive(Debug)]
@@ -40,7 +41,7 @@ pub struct Ir {
 }
 
 pub struct Env<'a> {
-	vars: Vec<(String, usize)>,
+	vars: Vec<(String, Type, usize)>,
 	generated_labels: usize,
 	outer: Option<&'a Env<'a>>,
 }
@@ -73,7 +74,7 @@ impl fmt::Display for OpArg {
 		let s = match self {
 			OpArg::Int(i) => format!("{}", i).to_string(),
 			OpArg::Temp(i) => format!("t{}", i).to_string(),
-			OpArg::String(i) => format!("{}", i).to_string(),
+			OpArg::Label(i) => format!("{}", i).to_string(),
 		};
 
 		write!(f, "{}", s)
@@ -112,9 +113,9 @@ fn convert_op(t: &Token) -> Op {
 
 fn find_var(env: &Env, s: &String) -> Option<usize>
 {
-	for (v, t) in &env.vars {
+	for (v, _v_type, v_temp) in &env.vars {
 		if v == s {
-			return Some(*t);
+			return Some(*v_temp);
 		}
 	}
 
@@ -184,7 +185,7 @@ fn assemble_call<'a>(env: &mut Env, i: usize,
 	let ir = Ir { 
 		ret: None,
 		op: Op::Call, 
-		arg1: Some(OpArg::String(name.to_string())),
+		arg1: Some(OpArg::Label(name.to_string())),
 		arg2: None,
 	};
 
@@ -322,7 +323,7 @@ fn assemble_stmt_if(env: &mut Env, t: usize,
 		let other_end_label = Ir {
 			ret: None,
 			op: Op::Label,
-			arg1: Some(OpArg::String(label_name.to_string())),
+			arg1: Some(OpArg::Label(label_name.to_string())),
 			arg2: None
 		};
 
@@ -331,7 +332,7 @@ fn assemble_stmt_if(env: &mut Env, t: usize,
 		let skip_other_ir = Ir {
 			ret: None,
 			op: Op::Goto,
-			arg1: Some(OpArg::String(label_name.to_string())),
+			arg1: Some(OpArg::Label(label_name.to_string())),
 			arg2: None
 		};
 		
@@ -341,7 +342,7 @@ fn assemble_stmt_if(env: &mut Env, t: usize,
 	let then_end_label = Ir {
 		ret: None,
 		op: Op::Label,
-		arg1: Some(OpArg::String(label_name.to_string())),
+		arg1: Some(OpArg::Label(label_name.to_string())),
 		arg2: None
 	};
 
@@ -353,7 +354,7 @@ fn assemble_stmt_if(env: &mut Env, t: usize,
 		ret: None,
 		op: Op::If, 
 		arg1: Some(OpArg::Temp(cond_t)),
-		arg2: Some(OpArg::String(label_name.to_string())),
+		arg2: Some(OpArg::Label(label_name.to_string())),
 	};
 
 	ir.append(&mut cond_ir);
@@ -368,7 +369,7 @@ fn assemble_stmt_if(env: &mut Env, t: usize,
 }
 
 fn assemble_stmt_alloc(env: &mut Env, mut t: usize,
-	name: String, value: Box<Expr>)
+	var_name: String, var_type: Type, value: Box<Expr>)
 	-> (usize, Vec<Ir>)
 {
 	let (value_t, mut value_ir) = assemble_expr(env, t, &value);
@@ -384,7 +385,7 @@ fn assemble_stmt_alloc(env: &mut Env, mut t: usize,
 
 	value_ir.push(ir);
 
-	env.vars.push((name, t));
+	env.vars.push((var_name.to_string(), var_type, t));
 
 	(t, value_ir)
 }
@@ -472,9 +473,9 @@ fn assemble_fn(env: &mut Env, name: String, f: Fn) -> Vec<Ir>
 	};
 
 	let mut p_t = 0;
-	for param in f.params {
+	for (param_name, param_type) in f.params {
 		p_t += 1;
-		n_env.vars.push((param, p_t));
+		n_env.vars.push((param_name, param_type, p_t));
 	}
 
 	let (_t, mut ir) = assemble_stmt(&mut n_env, p_t, f.stmts);
@@ -482,7 +483,7 @@ fn assemble_fn(env: &mut Env, name: String, f: Fn) -> Vec<Ir>
 	let fn_label = Ir {
 		ret: None,
 		op: Op::Label,
-		arg1: Some(OpArg::String(name.to_string())),
+		arg1: Some(OpArg::Label(name.to_string())),
 		arg2: None
 	};
 
@@ -505,8 +506,8 @@ fn assemble_stmt(env: &mut Env, t: usize, s: Stmt) -> (usize, Vec<Ir>)
 	match s {
 		Stmt::Return(expr) =>
 			assemble_stmt_return(env, t, expr),
-		Stmt::Alloc(name, value) =>
-			assemble_stmt_alloc(env, t, name, value),
+		Stmt::Alloc(var_name, var_type, value) =>
+			assemble_stmt_alloc(env, t, var_name, var_type, value),
 		Stmt::Assign(name, value) =>
 			assemble_stmt_assign(env, t, name, value),
 		Stmt::If(cond, then, otherwise) =>
@@ -530,7 +531,7 @@ pub fn assemble(p: Prog) -> Vec<Ir> {
 	let start = Ir {
 		ret: None,
 		op: Op::Call,
-		arg1: Some(OpArg::String("main".to_string())),
+		arg1: Some(OpArg::Label("main".to_string())),
 		arg2: None
 	};
 	

@@ -12,7 +12,7 @@ fn find_label(ops: &Vec<Ir>, label: &String) -> usize
 		let o = &ops[i];
 		match o.op {
 			Op::Label => match &o.arg1 {
-				Some(OpArg::String(s)) => {
+				Some(OpArg::Label(s)) => {
 					if s == label {
 						return i;
 					}
@@ -50,7 +50,7 @@ fn pretty_print_op(op: &Ir,
 					None => panic!("um"),
 				}
 			},
-			OpArg::String(s) => print!("'{}'", s),
+			OpArg::Label(s) => print!("{}", s),
 		}
 	}
 
@@ -65,7 +65,7 @@ fn pretty_print_op(op: &Ir,
 					None => panic!("um"),
 				}
 			},
-			OpArg::String(s) => print!("'{}'", s),
+			OpArg::Label(s) => print!("'{}'", s),
 		}
 	}
 
@@ -85,8 +85,7 @@ fn eval_op(ops: &Vec<Ir>,
 
 	match o.op {
 		Op::Exit => {
-			std::process::exit(0);
-			i
+			std::process::exit(0)
 		},
 		Op::Label => {
 			i + 1
@@ -94,14 +93,14 @@ fn eval_op(ops: &Vec<Ir>,
 			
 		Op::Goto => {
 			match &o.arg1 {
-				Some(OpArg::String(s)) => find_label(ops, &s),
+				Some(OpArg::Label(s)) => find_label(ops, &s),
 				_ => panic!("goto expected label"),
 			}
 		},
 
 		Op::Call => {
 			match &o.arg1 {
-				Some(OpArg::String(s)) => {
+				Some(OpArg::Label(s)) => {
 					match s.as_str() {
 						"print" => {
 							match temps.get(&1) {
@@ -158,33 +157,33 @@ fn eval_op(ops: &Vec<Ir>,
 		},
 
 		Op::Print => {
-			match o.arg1 {
+			match &o.arg1 {
 				Some(OpArg::Temp(t)) => {
 					match temps.get(&t) {
 						Some(i) => println!("{}", *i),
 						None => panic!("temp {} not found", t),
 					}
 				},
-				_ => panic!("print expected temp"),
+				_ => panic!("print expected temp/var"),
 			};
 
 			i + 1
 		},
 		
 		Op::Load => {
-			let v = match o.arg1 {
-				Some(OpArg::Int(i)) => i,
+			let v = match &o.arg1 {
+				Some(OpArg::Int(i)) => *i,
 				Some(OpArg::Temp(t)) => {
 					match temps.get(&t) {
 						Some(i) => *i,
 						None => panic!("temp {} not found", t),
 					}
 				},
-				_ => panic!("load expected int or temp"),
+				_ => panic!("load expected int, temp, or var"),
 			};
 
-			match o.ret {
-				Some(OpArg::Temp(t)) => temps.insert(t, v),
+			match &o.ret {
+				Some(OpArg::Temp(t)) => temps.insert(*t, v),
 				_ => panic!("load expected temp"),
 			};
 
@@ -203,7 +202,7 @@ fn eval_op(ops: &Vec<Ir>,
 			};
 
 			let skip_index = match &o.arg2 {
-				Some(OpArg::String(s)) => find_label(ops, &s),
+				Some(OpArg::Label(s)) => find_label(ops, &s),
 				_ => panic!("if expected label arg2"),
 			};
 
@@ -215,10 +214,10 @@ fn eval_op(ops: &Vec<Ir>,
 		},
 	
 		Op::Add | Op::Sub | Op::Mul | Op::Div => {
-			let a = match o.arg1 {
-				Some(OpArg::Int(i)) => i,
+			let a = match &o.arg1 {
+				Some(OpArg::Int(i)) => *i,
 				Some(OpArg::Temp(t)) => {
-					match temps.get(&t) {
+					match temps.get(t) {
 						Some(i) => *i,
 						None => panic!("temp {} not found", t),
 					}
@@ -226,10 +225,10 @@ fn eval_op(ops: &Vec<Ir>,
 				_ => panic!("math expected int or temp"),
 			};
 
-			let b = match o.arg2 {
-				Some(OpArg::Int(i)) => i,
+			let b = match &o.arg2 {
+				Some(OpArg::Int(i)) => *i,
 				Some(OpArg::Temp(t)) => {
-					match temps.get(&t) {
+					match temps.get(t) {
 						Some(i) => *i,
 						None => panic!("temp {} not found", t),
 					}
@@ -245,10 +244,8 @@ fn eval_op(ops: &Vec<Ir>,
 				_ => panic!("bad op somehow?"),
 			};
 
-			match o.ret {
-				Some(OpArg::Temp(t)) => {
-					temps.insert(t, v);
-				},
+			match &o.ret {
+				Some(OpArg::Temp(t)) => temps.insert(*t, v),
 				_ => panic!("load expected temp"),
 			};
 

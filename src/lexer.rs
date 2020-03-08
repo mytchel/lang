@@ -14,6 +14,7 @@ pub enum Token {
 	Colon,
 	Ref,
 	Pipe,
+	Arrow,
 	OpMul,
 	OpDiv,
 	OpAdd,
@@ -58,6 +59,7 @@ impl fmt::Display for Token {
 			Token::Dot => ".".to_string(),
 			Token::Comma => ",".to_string(),
 			Token::Ref => "&".to_string(),
+			Token::Arrow => "->".to_string(),
 			Token::Pipe => "|".to_string(),
 			Token::OpMul => "*".to_string(),
 			Token::OpDiv => "/".to_string(),
@@ -199,6 +201,8 @@ fn parse_syntax(r: &mut Reader) -> Option<Token> {
 		Some(Token::CompAnd)
 	} else if r.take_match("||") {
 		Some(Token::CompOr)
+	} else if r.take_match("->") {
+		Some(Token::Arrow)
 
 	} else if r.take_match(".") {
 		Some(Token::Dot)

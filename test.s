@@ -6,11 +6,11 @@
  * /* nested are also ok. */
   */
 
-fn double(x) {
+fn double(x: i64) -> i64 {
 	return x * 2;
 }
 
-fn recursive(a, b) {
+fn recursive(a: i64, b: i64) -> i64 {
 	if a {
 		return recursive(a - 1, b + 3);
 	} else {
@@ -57,18 +57,18 @@ fn main() {
 
 	print(1);
 
-	x := 42;
+	x :i64 = 42;
 	print(x + 4);
 	print(46);
 	x = 12;
 	print(x + 3);
 	print(15);
-	y := 8;
+	y :i64 = 8;
 	print(x + y);
 	print(20);
 
 	{
-		z := 10;
+		z :i64 = 10;
 		print(z + y + 4);
 		print(22);
 	}

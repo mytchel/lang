@@ -2,6 +2,15 @@ use std::fmt;
 use crate::lexer::Token;
 
 #[derive(Debug)]
+pub enum Type {
+	None,
+	I32,
+	I64,
+	Array(Box<Type>),
+	Ref(Box<Type>),
+}
+
+#[derive(Debug)]
 pub enum Expr<'a> {
 	Op(&'a Token, Box<Expr<'a>>, Option<Box<Expr<'a>>>),
 	Start(Box<Expr<'a>>, Option<Box<Expr<'a>>>),
@@ -12,7 +21,7 @@ pub enum Expr<'a> {
 #[derive(Debug)]
 pub enum Stmt<'a> {
 	Return(Option<Box<Expr<'a>>>),
-	Alloc(String, Box<Expr<'a>>),
+	Alloc(String, Type, Box<Expr<'a>>),
 	Assign(String, Box<Expr<'a>>),
 	If(Box<Expr<'a>>, Box<Stmt<'a>>, Option<Box<Stmt<'a>>>),
 	Expr(Box<Expr<'a>>),
@@ -20,7 +29,8 @@ pub enum Stmt<'a> {
 }
 
 pub struct Fn<'a> {
-	pub params: Vec<String>,
+	pub params: Vec<(String, Type)>,
+	pub ret: Type,
 	pub stmts: Stmt<'a>,
 }
 
@@ -28,6 +38,20 @@ pub struct Prog<'a> {
 	pub funcs: Vec<(String, Fn<'a>)>,
 }
 
+impl<'a> fmt::Display for Type {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let s = match self {
+			Type::None => format!("()").to_string(),
+			Type::I64 => format!("i64").to_string(),
+			Type::I32 => format!("i32").to_string(),
+			Type::Array(t) => format!("[{}]", t).to_string(),
+			Type::Ref(t) => format!("&{}", t).to_string(),
+		};
+
+		write!(f, "{}", s)
+	}
+}
+	
 impl<'a> fmt::Display for Expr<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let s = match self {
@@ -70,8 +94,8 @@ impl<'a> fmt::Display for Stmt<'a> {
 					None => format!("ret"),
 				}
 			},
-			Stmt::Alloc(name, value) => {
-				format!("alloc {} = {}", name, value)
+			Stmt::Alloc(name, t, value) => {
+				format!("alloc {} : {} = {}", name, t, value)
 			},
 			Stmt::Assign(name, value) => {
 				format!("assign {} = {}", name, value)
@@ -100,13 +124,18 @@ impl<'a> fmt::Display for Stmt<'a> {
 
 impl<'a> fmt::Display for Fn<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let ret_s = format!("{}", self.ret).to_string();
+
 		let param_s: Vec<String> = self.params
 					.iter()
-					.map(|x| x.to_string())
+					.map(|(n, t) | format!("{}: {}", n, t)
+						.to_string())
 					.collect();
 
-		let s = format!("fn ({}) {}", 
-			param_s.join(", "), self.stmts);
+		let s = format!("fn ({}) -> {} {}", 
+			param_s.join(", "), 
+			ret_s,
+			self.stmts);
 
 		write!(f, "{}", s)
 	}
@@ -335,7 +364,7 @@ fn parse_stmt_let<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 		return None;
 	}
 
-	let name = match &tokens[0] {
+	let var_name = match &tokens[0] {
 		Token::Symbol(s) => s,
 		_ => return None,
 	};
@@ -343,14 +372,18 @@ fn parse_stmt_let<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 	if tokens[1] != Token::Colon {
 		return None;
 	}
-	
-	if tokens[2] != Token::Assign {
-		return None;
-	}
-	
-	*tokens = &tokens[3..];
 
-	let value = match parse_expr(tokens) {
+	let mut new_tokens = &tokens[2..];
+	
+	let var_type = parse_type(&mut new_tokens);
+	
+	if new_tokens[0] != Token::Assign {
+		panic!("expected =");
+	}
+
+	*tokens = &new_tokens[1..];
+
+	let var_value = match parse_expr(tokens) {
 		None => panic!("expected expression"),
 		Some(e) => e,
 	};
@@ -359,7 +392,9 @@ fn parse_stmt_let<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 		panic!("expected ;");
 	}
 
-	Some(Stmt::Alloc(name.to_string(), Box::new(value)))
+	Some(Stmt::Alloc(var_name.to_string(), 
+		var_type, 
+		Box::new(var_value)))
 }
 
 fn parse_stmt_return<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
@@ -420,6 +455,27 @@ fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 		.or_else(|| parse_stmt_expr(tokens))
 }
 
+fn parse_type<'a>(tokens: &mut &'a [Token]) -> Type {
+	if tokens.len() < 1 {
+		panic!("expected type");
+	}
+
+	let r = match &tokens[0] {
+		Token::Symbol(s) => {
+			match s.as_str() {
+				"i64" => Type::I64,
+				"i32" => Type::I32,
+				_ => panic!("expected type, got : {}", 
+						&tokens[0]),
+			}
+		},
+		_ => panic!("expected type, got : {}", &tokens[0]),
+	};
+
+	*tokens = &tokens[1..];
+	r
+}
+
 fn parse_fn<'a>(tokens: &mut &'a [Token]) -> Option<(String, Fn<'a>)>
 {
 	if !parse_match(Token::Fn, tokens) {
@@ -441,10 +497,10 @@ fn parse_fn<'a>(tokens: &mut &'a [Token]) -> Option<(String, Fn<'a>)>
 		panic!("unexpected {} expected (", &tokens[0]);
 	}
 
-	let mut param_vec: Vec<String> = vec![];
+	let mut param_vec: Vec<(String, Type)> = vec![];
 
 	while tokens.len() > 1 {
-		let n = match &tokens[0] {
+		let param_name = match &tokens[0] {
 			Token::Symbol(s) => s.to_string(),
 			Token::Rparen => break,
 			_ => panic!("expected param name"),
@@ -452,7 +508,14 @@ fn parse_fn<'a>(tokens: &mut &'a [Token]) -> Option<(String, Fn<'a>)>
 
 		*tokens = &tokens[1..];
 
-		param_vec.push(n);
+		if !parse_match(Token::Colon, tokens) {
+			panic!("expected : type");
+		}
+
+		let param_type = parse_type(tokens);
+		
+		param_vec.push((param_name, param_type));
+
 		if !parse_match(Token::Comma, tokens) {
 			break;
 		}
@@ -462,6 +525,12 @@ fn parse_fn<'a>(tokens: &mut &'a [Token]) -> Option<(String, Fn<'a>)>
 		panic!("expected )");
 	}
 
+	let ret_type = if parse_match(Token::Arrow, tokens) {
+		parse_type(tokens)
+	} else {
+		Type::None
+	};
+
 	let stmts = match parse_stmt_list(tokens) {
 		Some(t) => t,
 		None => panic!("function expected statement list"),
@@ -469,6 +538,7 @@ fn parse_fn<'a>(tokens: &mut &'a [Token]) -> Option<(String, Fn<'a>)>
 
 	let f = Fn {
 		params: param_vec,
+		ret: ret_type,
 		stmts: stmts,
 	};
 		
