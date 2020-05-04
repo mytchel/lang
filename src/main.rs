@@ -3,6 +3,7 @@ use std::fs;
 
 pub mod lexer;
 pub mod parser;
+pub mod typechecker;
 pub mod assembler;
 pub mod evaluator;
 
@@ -19,7 +20,9 @@ fn main() {
     	println!("prog {}", parsed);
     	println!("");
 
-		let ops = assembler::assemble(parsed);
+    	let checked = parsed;//typechecker::typecheck(parsed);
+
+		let ops = assembler::assemble(checked);
     	println!("ops:");
     	println!("");
     	let mut i = 0;

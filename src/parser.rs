@@ -1,8 +1,9 @@
 use std::fmt;
 use crate::lexer::Token;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
+	Unknown,
 	None,
 	I32,
 	I64,
@@ -11,36 +12,37 @@ pub enum Type {
 }
 
 #[derive(Debug)]
-pub enum Expr<'a> {
-	Op(&'a Token, Box<Expr<'a>>, Option<Box<Expr<'a>>>),
-	Start(Box<Expr<'a>>, Option<Box<Expr<'a>>>),
-	Call(String, Vec<Expr<'a>>),
-	Item(&'a Token),
+pub enum Expr {
+	Op(Type, Token, Box<Expr>, Option<Box<Expr>>),
+	Start(Type, Box<Expr>, Option<Box<Expr>>),
+	Call(String, Vec<Expr>),
+	Item(Token),
 }
 
 #[derive(Debug)]
-pub enum Stmt<'a> {
-	Return(Option<Box<Expr<'a>>>),
-	Alloc(String, Type, Box<Expr<'a>>),
-	Assign(String, Box<Expr<'a>>),
-	If(Box<Expr<'a>>, Box<Stmt<'a>>, Option<Box<Stmt<'a>>>),
-	Expr(Box<Expr<'a>>),
-	List(Vec<Stmt<'a>>),
+pub enum Stmt {
+	Return(Option<Box<Expr>>),
+	Alloc(String, Type, Box<Expr>),
+	Assign(String, Box<Expr>),
+	If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>),
+	Expr(Box<Expr>),
+	List(Vec<Stmt>),
 }
 
-pub struct Fn<'a> {
+pub struct Fn {
 	pub params: Vec<(String, Type)>,
 	pub ret: Type,
-	pub stmts: Stmt<'a>,
+	pub stmts: Stmt,
 }
 
-pub struct Prog<'a> {
-	pub funcs: Vec<(String, Fn<'a>)>,
+pub struct Prog {
+	pub funcs: Vec<(String, Fn)>,
 }
 
-impl<'a> fmt::Display for Type {
+impl fmt::Display for Type {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let s = match self {
+			Type::Unknown => format!("_").to_string(),
 			Type::None => format!("()").to_string(),
 			Type::I64 => format!("i64").to_string(),
 			Type::I32 => format!("i32").to_string(),
@@ -52,23 +54,23 @@ impl<'a> fmt::Display for Type {
 	}
 }
 	
-impl<'a> fmt::Display for Expr<'a> {
+impl fmt::Display for Expr {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let s = match self {
-			Expr::Start(v, next) => {
+			Expr::Start(t, v, next) => {
 				match next {
 					Some(n) =>
-						format!("{} {}", v, n).to_string(),
+						format!("_{} {} {}", t, v, n).to_string(),
 					None => 
-						format!("{}", v).to_string(),
+						format!("_{} {}", t, v).to_string(),
 				}
 			},
-			Expr::Op(o, v, next) => {
+			Expr::Op(t, o, v, next) => {
 				match next {
 					Some(n) =>
-						format!("({} {} {})", o, v, n).to_string(),
+						format!("(_{} {} {} {})", t, o, v, n).to_string(),
 					None => 
-						format!("({} {})", o, v).to_string(),
+						format!("(_{} {} {})", t, o, v).to_string(),
 				}
 			},
 			Expr::Call(f, args) => {
@@ -85,7 +87,7 @@ impl<'a> fmt::Display for Expr<'a> {
 	}
 }
 
-impl<'a> fmt::Display for Stmt<'a> {
+impl fmt::Display for Stmt {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let s = match self {
 			Stmt::Return(value) => {
@@ -122,7 +124,7 @@ impl<'a> fmt::Display for Stmt<'a> {
 	}
 }
 
-impl<'a> fmt::Display for Fn<'a> {
+impl fmt::Display for Fn {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let ret_s = format!("{}", self.ret).to_string();
 
@@ -141,7 +143,7 @@ impl<'a> fmt::Display for Fn<'a> {
 	}
 }
 
-impl<'a> fmt::Display for Prog<'a> {
+impl fmt::Display for Prog {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let fn_s: Vec<String> = self.funcs
 					.iter()
@@ -156,7 +158,7 @@ impl<'a> fmt::Display for Prog<'a> {
 	}
 }
 
-fn parse_match<'a>(expect: Token, tokens: &mut &'a [Token]) -> bool
+fn parse_match(expect: Token, tokens: &mut &[Token]) -> bool
 {
 	if tokens.len() == 0 {
 		false
@@ -168,7 +170,7 @@ fn parse_match<'a>(expect: Token, tokens: &mut &'a [Token]) -> bool
 	}
 }
 
-fn parse_call<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
+fn parse_call(tokens: &mut &[Token]) -> Option<Expr>
 {
 	if tokens.len() < 2 {
 		return None;
@@ -199,7 +201,7 @@ fn parse_call<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 	}
 }
 
-fn parse_f<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
+fn parse_f(tokens: &mut &[Token]) -> Option<Expr>
 {
 	let t = &tokens[0];
 
@@ -218,19 +220,19 @@ fn parse_f<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 				Some(c) => Some(c),
 				None => {
 					*tokens = &tokens[1..];
-					Some(Expr::Item(t))
+					Some(Expr::Item(t.clone()))
 				},
 			}
 		},
 		Token::Integer(_) | Token::Float(_) => {
 			*tokens = &tokens[1..];
-			Some(Expr::Item(t))
+			Some(Expr::Item(t.clone()))
 		},
 		tt => panic!("unexpected {}", tt),
 	}
 }
 
-fn parse_expr_term_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
+fn parse_expr_term_p(tokens: &mut &[Token]) -> Option<Expr>
 {
 	let t = &tokens[0];
 	match t {
@@ -241,13 +243,13 @@ fn parse_expr_term_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 				Some(n) => Some(Box::new(n)),
 				None => None,
 			};
-			Some(Expr::Op(t, Box::new(v), next))
+			Some(Expr::Op(Type::Unknown, t.clone(), Box::new(v), next))
 		},
 		_ => None,
 	}
 }
 
-fn parse_expr_term<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
+fn parse_expr_term(tokens: &mut &[Token]) -> Option<Expr>
 {
 	let v = parse_f(tokens)?;
 	let n = match parse_expr_term_p(tokens) {
@@ -255,10 +257,10 @@ fn parse_expr_term<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 		None => None,
 	};
 
-	Some(Expr::Start(Box::new(v), n))
+	Some(Expr::Start(Type::Unknown, Box::new(v), n))
 }
 
-fn parse_expr_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
+fn parse_expr_p(tokens: &mut &[Token]) -> Option<Expr>
 {
 	let t = &tokens[0];
 	match t {
@@ -269,13 +271,13 @@ fn parse_expr_p<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 				Some(n) => Some(Box::new(n)),
 				None => None,
 			};
-			Some(Expr::Op(t, Box::new(v), next))
+			Some(Expr::Op(Type::Unknown, t.clone(), Box::new(v), next))
 		},
 		_ => None,
 	}
 }
 
-fn parse_expr<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
+fn parse_expr(tokens: &mut &[Token]) -> Option<Expr>
 {
 	let v = parse_expr_term(tokens)?;
 	let n = match parse_expr_p(tokens) {
@@ -283,10 +285,10 @@ fn parse_expr<'a>(tokens: &mut &'a [Token]) -> Option<Expr<'a>>
 		None => None,
 	};
 
-	Some(Expr::Start(Box::new(v), n))
+	Some(Expr::Start(Type::Unknown, Box::new(v), n))
 }
 	
-fn parse_stmt_expr<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+fn parse_stmt_expr(tokens: &mut &[Token]) -> Option<Stmt>
 {
 	let expr = parse_expr(tokens)?;
 
@@ -297,7 +299,7 @@ fn parse_stmt_expr<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 	Some(Stmt::Expr(Box::new(expr)))
 }
 
-fn parse_stmt_if<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+fn parse_stmt_if(tokens: &mut &[Token]) -> Option<Stmt>
 {
 	if tokens[0] != Token::If {
 		return None;
@@ -329,7 +331,7 @@ fn parse_stmt_if<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 	Some(Stmt::If(Box::new(cond), Box::new(then), otherwise))
 }
 
-fn parse_stmt_assign<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+fn parse_stmt_assign(tokens: &mut &[Token]) -> Option<Stmt>
 {
 	if tokens.len() < 2 {
 		return None;
@@ -358,7 +360,7 @@ fn parse_stmt_assign<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 	Some(Stmt::Assign(name.to_string(), Box::new(value)))
 }
 
-fn parse_stmt_let<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+fn parse_stmt_let(tokens: &mut &[Token]) -> Option<Stmt>
 {
 	if tokens.len() < 3 {
 		return None;
@@ -397,7 +399,7 @@ fn parse_stmt_let<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 		Box::new(var_value)))
 }
 
-fn parse_stmt_return<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+fn parse_stmt_return(tokens: &mut &[Token]) -> Option<Stmt>
 {
 	if !parse_match(Token::Return, tokens) {
 		return None;
@@ -419,7 +421,7 @@ fn parse_stmt_return<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 	return Some(Stmt::Return(e));
 }
 	
-fn parse_stmt_list<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+fn parse_stmt_list(tokens: &mut &[Token]) -> Option<Stmt>
 {
 	let mut stmts: Vec<Stmt> = vec![];
 
@@ -441,7 +443,7 @@ fn parse_stmt_list<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 	Some(Stmt::List(stmts))
 }
 
-fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
+fn parse_stmt(tokens: &mut &[Token]) -> Option<Stmt>
 {
 	if tokens.len() == 0 {
 		return None
@@ -455,7 +457,7 @@ fn parse_stmt<'a>(tokens: &mut &'a [Token]) -> Option<Stmt<'a>>
 		.or_else(|| parse_stmt_expr(tokens))
 }
 
-fn parse_type<'a>(tokens: &mut &'a [Token]) -> Type {
+fn parse_type(tokens: &mut &[Token]) -> Type {
 	if tokens.len() < 1 {
 		panic!("expected type");
 	}
@@ -476,7 +478,7 @@ fn parse_type<'a>(tokens: &mut &'a [Token]) -> Type {
 	r
 }
 
-fn parse_fn<'a>(tokens: &mut &'a [Token]) -> Option<(String, Fn<'a>)>
+fn parse_fn(tokens: &mut &[Token]) -> Option<(String, Fn)>
 {
 	if !parse_match(Token::Fn, tokens) {
 		return None;
@@ -545,7 +547,7 @@ fn parse_fn<'a>(tokens: &mut &'a [Token]) -> Option<(String, Fn<'a>)>
 	Some((name.to_string(), f))
 }
 
-pub fn parse<'a>(tokens: &'a [Token]) -> Prog<'a>
+pub fn parse(tokens: &[Token]) -> Prog
 {
 	let mut mtokens = &tokens[..];
 

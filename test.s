@@ -7,14 +7,14 @@
   */
 
 fn double(x: i64) -> i64 {
-	return x * 2;
+	x * 2
 }
 
 fn recursive(a: i64, b: i64) -> i64 {
 	if a {
-		return recursive(a - 1, b + 3);
+		recursive(a - 1, b + 3)
 	} else {
-		return b;
+		b
 	}
 }
 

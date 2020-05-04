@@ -138,8 +138,8 @@ fn convert_item(env: &Env, t: &Token) -> OpArg {
 	}
 }
 
-fn assemble_call<'a>(env: &mut Env, i: usize, 
-	name: &String, args: &Vec<Expr<'a>>) -> (usize, Vec<Ir>)
+fn assemble_call(env: &mut Env, i: usize, 
+	name: &String, args: &Vec<Expr>) -> (usize, Vec<Ir>)
 {
 	let mut irs: Vec<Ir> = vec![];
 
@@ -220,7 +220,7 @@ fn assemble_expr(env: &mut Env, mut i: usize, e: &Expr) ->
 	(usize, Vec<Ir>)
 {
 	match e {
-		Expr::Start(v, n) => {
+		Expr::Start(_t, v, n) => {
 			let (i, mut ir_a) = assemble_expr(env, i, &v);
 			if let Some(next) = n {
 				let (i, mut ir_b) = assemble_expr(env, i, &next);
@@ -231,7 +231,7 @@ fn assemble_expr(env: &mut Env, mut i: usize, e: &Expr) ->
 			}
 		},
 
-		Expr::Op(o, v, n) => {
+		Expr::Op(_t, o, v, n) => {
 			let (value, mut ir_a) = assemble_expr(env, i, &v);
 			let ret = value + 1;
 
