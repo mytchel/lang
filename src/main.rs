@@ -20,7 +20,7 @@ fn main() {
     	println!("prog {}", parsed);
     	println!("");
 
-    	let checked = parsed;//typechecker::typecheck(parsed);
+    	let checked = typechecker::typecheck(parsed);
 
 		let ops = assembler::assemble(checked);
     	println!("ops:");

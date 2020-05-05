@@ -220,39 +220,34 @@ fn assemble_expr(env: &mut Env, mut i: usize, e: &Expr) ->
 	(usize, Vec<Ir>)
 {
 	match e {
-		Expr::Start(_t, v, n) => {
-			let (i, mut ir_a) = assemble_expr(env, i, &v);
-			if let Some(next) = n {
-				let (i, mut ir_b) = assemble_expr(env, i, &next);
-				ir_a.append(&mut ir_b);
-				(i, ir_a)
-			} else {
-				(i, ir_a)
-			}
+    	Expr::TempStart(_, _) | Expr::TempOp(_, _, _) => {
+    	   panic!("Shouldn't get unfixed expressions")
 		},
+        
+        Expr::Op(token, a, b) => {
+            let mut ir = vec![];
+            
+            let (value_a, mut ir_a) = assemble_expr(env, i, &a);
+            ir.append(&mut ir_a);
+            i = value_a;
+            
+            let (value_b, mut ir_b) = assemble_expr(env, i, &b);
+            ir.append(&mut ir_b);
+            i = value_b;
 
-		Expr::Op(_t, o, v, n) => {
-			let (value, mut ir_a) = assemble_expr(env, i, &v);
-			let ret = value + 1;
-
-			let ir_b = Ir { 
-				ret: Some(OpArg::Temp(ret)),
-				op: convert_op(o), 
-				arg1: Some(OpArg::Temp(i)),
-				arg2: Some(OpArg::Temp(value)),
-			};
-
-			ir_a.push(ir_b);
-		
-			i = ret;
-			if let Some(next) = n {
-				let (i, mut ir_c) = assemble_expr(env, i, &next);
-				ir_a.append(&mut ir_c);
-				(i, ir_a)
-			} else {
-				(i, ir_a)
-			}
-		},
+            let ret = i + 1;
+    
+   			let ir_op = Ir { 
+   				ret: Some(OpArg::Temp(ret)),
+   				op: convert_op(token), 
+   				arg1: Some(OpArg::Temp(value_a)),
+   				arg2: Some(OpArg::Temp(value_b)),
+   			};
+    
+   			ir.push(ir_op);
+    		
+   			(ret, ir)
+        },
 
 		Expr::Item(item) => {
 			i = i + 1;

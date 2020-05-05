@@ -5,6 +5,7 @@ use crate::lexer::Token;
 pub enum Type {
 	Unknown,
 	None,
+	Bool,
 	I32,
 	I64,
 	Array(Box<Type>),
@@ -13,10 +14,12 @@ pub enum Type {
 
 #[derive(Debug)]
 pub enum Expr {
-	Op(Type, Token, Box<Expr>, Option<Box<Expr>>),
-	Start(Type, Box<Expr>, Option<Box<Expr>>),
+	Op(Token, Box<Expr>, Box<Expr>),
 	Call(String, Vec<Expr>),
 	Item(Token),
+	
+	TempOp(Token, Box<Expr>, Option<Box<Expr>>),
+	TempStart(Box<Expr>, Option<Box<Expr>>),
 }
 
 #[derive(Debug)]
@@ -44,6 +47,7 @@ impl fmt::Display for Type {
 		let s = match self {
 			Type::Unknown => format!("_").to_string(),
 			Type::None => format!("()").to_string(),
+			Type::Bool => format!("bool").to_string(),
 			Type::I64 => format!("i64").to_string(),
 			Type::I32 => format!("i32").to_string(),
 			Type::Array(t) => format!("[{}]", t).to_string(),
@@ -57,22 +61,27 @@ impl fmt::Display for Type {
 impl fmt::Display for Expr {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let s = match self {
-			Expr::Start(t, v, next) => {
-				match next {
+			Expr::TempStart(v, next) => {
+                match next {
 					Some(n) =>
-						format!("_{} {} {}", t, v, n).to_string(),
+						format!("({} {})", v, n).to_string(),
 					None => 
-						format!("_{} {}", t, v).to_string(),
+						format!("({})", v).to_string(),
 				}
 			},
-			Expr::Op(t, o, v, next) => {
-				match next {
+            Expr::TempOp(o, v, next) => {
+                match next {
 					Some(n) =>
-						format!("(_{} {} {} {})", t, o, v, n).to_string(),
+						format!("({} {} {})", o, v, n).to_string(),
 					None => 
-						format!("(_{} {} {})", t, o, v).to_string(),
+						format!("({} {})", o, v).to_string(),
 				}
 			},
+			
+			Expr::Op(o, a, b) => {
+    			format!("({} {} {})", a, o, b).to_string()
+			},
+
 			Expr::Call(f, args) => {
 				let xs: Vec<String> = args
 					.iter()
@@ -208,7 +217,7 @@ fn parse_f(tokens: &mut &[Token]) -> Option<Expr>
 	match t {
 		Token::Lparen => {
 			*tokens = &tokens[1..];
-			let r = parse_expr(tokens);
+			let r = parse_expr_temp(tokens);
 			if parse_match(Token::Rparen, tokens) {
 				r
 			} else {
@@ -243,7 +252,7 @@ fn parse_expr_term_p(tokens: &mut &[Token]) -> Option<Expr>
 				Some(n) => Some(Box::new(n)),
 				None => None,
 			};
-			Some(Expr::Op(Type::Unknown, t.clone(), Box::new(v), next))
+			Some(Expr::TempOp(t.clone(), Box::new(v), next))
 		},
 		_ => None,
 	}
@@ -257,7 +266,7 @@ fn parse_expr_term(tokens: &mut &[Token]) -> Option<Expr>
 		None => None,
 	};
 
-	Some(Expr::Start(Type::Unknown, Box::new(v), n))
+	Some(Expr::TempStart(Box::new(v), n))
 }
 
 fn parse_expr_p(tokens: &mut &[Token]) -> Option<Expr>
@@ -271,13 +280,13 @@ fn parse_expr_p(tokens: &mut &[Token]) -> Option<Expr>
 				Some(n) => Some(Box::new(n)),
 				None => None,
 			};
-			Some(Expr::Op(Type::Unknown, t.clone(), Box::new(v), next))
+			Some(Expr::TempOp(t.clone(), Box::new(v), next))
 		},
 		_ => None,
 	}
 }
 
-fn parse_expr(tokens: &mut &[Token]) -> Option<Expr>
+fn parse_expr_temp(tokens: &mut &[Token]) -> Option<Expr>
 {
 	let v = parse_expr_term(tokens)?;
 	let n = match parse_expr_p(tokens) {
@@ -285,7 +294,37 @@ fn parse_expr(tokens: &mut &[Token]) -> Option<Expr>
 		None => None,
 	};
 
-	Some(Expr::Start(Type::Unknown, Box::new(v), n))
+	Some(Expr::TempStart(Box::new(v), n))
+}
+
+fn fix_expr(expr: Expr) -> Expr {
+    match expr {
+        Expr::TempStart(a, mut b) => {
+            let mut fixed = fix_expr(*a);
+
+            while let Some(bb) = b {
+                match *bb {
+                    Expr::TempOp(t, x, y) => {
+                        fixed = Expr::Op(t, Box::new(fixed), Box::new(fix_expr(*x)));
+                        b = y;
+                    },
+                    _ => panic!("malformed temp expression"),
+                }
+            }
+
+            fixed
+        },
+
+        Expr::TempOp(_, _, _) => panic!("malformed temp expression"),
+        _ => expr,
+    }
+}
+
+fn parse_expr(tokens: &mut &[Token]) -> Option<Expr>
+{
+    let expr = parse_expr_temp(tokens)?;
+
+    Some(fix_expr(expr))
 }
 	
 fn parse_stmt_expr(tokens: &mut &[Token]) -> Option<Stmt>
