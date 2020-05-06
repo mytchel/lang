@@ -6,6 +6,10 @@
  * /* nested are also ok. */
   */
 
+fn over_half(a: i64, b: i64) -> bool {
+	return a > b / 2;
+}
+
 fn double(x: i64) -> i64 {
 	return x * 2;
 }
@@ -76,5 +80,11 @@ fn main() {
 	/* this should fail. which it currently does */
 	//z + x;
 
+	if over_half(4, 6) {
+        print(1);
+	} else {
+	   print(0);
+	}
+	print(1);
 }
 

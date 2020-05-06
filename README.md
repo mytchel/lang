@@ -15,10 +15,10 @@ Supports:
 * Special print function.
 * Recursion.
 * Type annotations.
+* Types.
 
 Todo:
 
-* Types.
 * Structs.
 * Refs.
 * Arrays.
