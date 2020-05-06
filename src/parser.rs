@@ -4,12 +4,27 @@ use crate::lexer::Token;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
 	Unknown,
+
 	None,
+
 	Bool,
+
+	U8,
+	U16,
+	U32,
+	U64,
+
+	I8,
+	I16,
 	I32,
 	I64,
-	Array(Box<Type>),
+
+	F64,
+	
+    Array(Box<Type>),
 	Ref(Box<Type>),
+
+	Fn(Box<Type>, Vec<Type>),
 }
 
 #[derive(Debug)]
@@ -46,12 +61,33 @@ impl fmt::Display for Type {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let s = match self {
 			Type::Unknown => format!("_").to_string(),
+
 			Type::None => format!("()").to_string(),
+
 			Type::Bool => format!("bool").to_string(),
-			Type::I64 => format!("i64").to_string(),
+
+            Type::U8  => format!("u8").to_string(),
+			Type::U16 => format!("u16").to_string(),
+			Type::U32 => format!("u32").to_string(),
+			Type::U64 => format!("u64").to_string(),
+
+            Type::I8  => format!("i8").to_string(),
+			Type::I16 => format!("i16").to_string(),
 			Type::I32 => format!("i32").to_string(),
+			Type::I64 => format!("i64").to_string(),
+			
+			Type::F64 => format!("f64").to_string(),
+			
 			Type::Array(t) => format!("[{}]", t).to_string(),
 			Type::Ref(t) => format!("&{}", t).to_string(),
+			
+            Type::Fn(ret, args) => {
+                let s: Vec<String> = args
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect();
+                format!("fn({}) -> {}", s.join(", "), ret).to_string()
+			},
 		};
 
 		write!(f, "{}", s)
@@ -506,6 +542,7 @@ fn parse_type(tokens: &mut &[Token]) -> Type {
 			match s.as_str() {
 				"i64" => Type::I64,
 				"i32" => Type::I32,
+				"bool" => Type::Bool,
 				_ => panic!("expected type, got : {}", 
 						&tokens[0]),
 			}

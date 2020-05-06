@@ -11,7 +11,7 @@ fn double(x: i64) -> i64 {
 }
 
 fn recursive(a: i64, b: i64) -> i64 {
-	if a {
+	if a != 0 {
 		return recursive(a - 1, b + 3);
 	} else {
 		return b;
@@ -36,12 +36,12 @@ fn main() {
 	print(10 * (4 - 2));
 	print(20);
 
-	if (4 + 9) {
+	if (4 + 9) > 0 {
 		print(1);
 	}
 	print(1);
 
-	if 10 - 10 {
+	if 10 - 10 > 0{
 		print(1);
 	} else {
 		print(0);
@@ -49,7 +49,7 @@ fn main() {
 
 	print(0);
 
-	if 1 {
+	if 1 > 0 {
 		print(1);
 	} else {
 		print(0);

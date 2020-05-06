@@ -29,15 +29,17 @@ pub enum Token {
 	CompAnd,
 	CompOr,
 	Assign,
+
+	If,
+	Else,
+	Fn,
+	Return,
+
 	Integer(i64),
 	Float(f64),
 	Bool(bool),
 	String(String),
 	Symbol(String),
-	If,
-	Else,
-	Fn,
-	Return,
 }
 
 struct Reader<'a> {
