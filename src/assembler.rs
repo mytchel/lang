@@ -15,14 +15,13 @@ pub enum Op {
 	Print,
 	Load,
 	If,
-	Add,
-	Sub,
-	Mul,
-	Div,
+
 	Push,
 	Pop,
 	Call,
 	Ret,
+
+	Op(Token),
 }
 
 #[derive(Debug)]
@@ -49,20 +48,26 @@ pub struct Env<'a> {
 impl fmt::Display for Op {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let s = match self {
-			Op::Exit   => "exit",
-			Op::Label  => "label",
-			Op::Goto   => "go",
-			Op::Print  => "print",
-			Op::Load   => "ldr",
-			Op::If     => "if",
+			Op::Exit   => "exit".to_string(),
+			Op::Label  => "label".to_string(),
+			Op::Goto   => "go".to_string(),
+			Op::Print  => "print".to_string(),
+			Op::Load   => "ldr".to_string(),
+			Op::If     => "if".to_string(),
+    		Op::Push   => "push".to_string(),
+			Op::Pop    => "pop".to_string(),
+			Op::Call   => "call".to_string(),
+			Op::Ret    => "ret".to_string(),
+	
+	/*		
 			Op::Add    => "add",
 			Op::Sub    => "sub",
 			Op::Mul    => "mul",
 			Op::Div    => "div",
-			Op::Push   => "push",
-			Op::Pop    => "pop",
-			Op::Call   => "call",
-			Op::Ret    => "ret",
+    		Op::Eq     => "eq",
+			Op::Ne     => "ne",
+			*/
+			Op::Op(t)  => format!("op({})", t.to_string()),
 		};
 
 		write!(f, "{}", s)
@@ -103,10 +108,20 @@ impl fmt::Display for Ir {
 
 fn convert_op(t: &Token) -> Op {
 	match t {
-		Token::OpAdd => Op::Add,
-		Token::OpSub => Op::Sub,
-		Token::OpMul => Op::Mul,
-		Token::OpDiv => Op::Div,
+		Token::OpAdd |
+		Token::OpSub |
+		Token::OpMul |
+		Token::OpDiv |
+		Token::OpRem |
+		Token::CompEqual |
+		Token::CompInEqual |
+		Token::CompGreaterEqual |
+		Token::CompGreater |
+		Token::CompLessEqual |
+		Token::CompLess |
+		Token::CompAnd |
+		Token::CompOr
+		  => Op::Op(t.clone()),
 		_ => panic!("op {} not supported", t),
 	}
 }

@@ -8,6 +8,7 @@ pub enum Token {
 	Rbrace,
 	Lsquare,
 	Rsquare,
+
 	Dot,
 	Comma,
 	Semicolon,
@@ -15,11 +16,13 @@ pub enum Token {
 	Ref,
 	Pipe,
 	Arrow,
+
 	OpMul,
 	OpDiv,
 	OpAdd,
 	OpSub,
 	OpRem,
+
 	CompEqual,
 	CompInEqual,
 	CompGreaterEqual,
@@ -28,6 +31,7 @@ pub enum Token {
 	CompLess,
 	CompAnd,
 	CompOr,
+
 	Assign,
 
 	If,

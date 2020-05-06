@@ -253,7 +253,7 @@ fn parse_f(tokens: &mut &[Token]) -> Option<Expr>
 	match t {
 		Token::Lparen => {
 			*tokens = &tokens[1..];
-			let r = parse_expr_temp(tokens);
+			let r = parse_expr_outer(tokens);
 			if parse_match(Token::Rparen, tokens) {
 				r
 			} else {
@@ -277,14 +277,14 @@ fn parse_f(tokens: &mut &[Token]) -> Option<Expr>
 	}
 }
 
-fn parse_expr_term_p(tokens: &mut &[Token]) -> Option<Expr>
+fn parse_expr_a_p(tokens: &mut &[Token]) -> Option<Expr>
 {
 	let t = &tokens[0];
 	match t {
 		Token::OpMul | Token::OpDiv | Token::OpRem => {
 			*tokens = &tokens[1..];
 			let v = parse_f(tokens)?;
-			let next = match parse_expr_term_p(tokens) {
+			let next = match parse_expr_a_p(tokens) {
 				Some(n) => Some(Box::new(n)),
 				None => None,
 			};
@@ -294,10 +294,10 @@ fn parse_expr_term_p(tokens: &mut &[Token]) -> Option<Expr>
 	}
 }
 
-fn parse_expr_term(tokens: &mut &[Token]) -> Option<Expr>
+fn parse_expr_a(tokens: &mut &[Token]) -> Option<Expr>
 {
 	let v = parse_f(tokens)?;
-	let n = match parse_expr_term_p(tokens) {
+	let n = match parse_expr_a_p(tokens) {
 		Some(nn) => Some(Box::new(nn)),
 		None => None,
 	};
@@ -305,14 +305,14 @@ fn parse_expr_term(tokens: &mut &[Token]) -> Option<Expr>
 	Some(Expr::TempStart(Box::new(v), n))
 }
 
-fn parse_expr_p(tokens: &mut &[Token]) -> Option<Expr>
+fn parse_expr_b_p(tokens: &mut &[Token]) -> Option<Expr>
 {
 	let t = &tokens[0];
 	match t {
 		Token::OpAdd | Token::OpSub => {
 			*tokens = &tokens[1..];
-			let v = parse_expr_term(tokens)?;
-			let next = match parse_expr_p(tokens) {
+			let v = parse_expr_a(tokens)?;
+			let next = match parse_expr_b_p(tokens) {
 				Some(n) => Some(Box::new(n)),
 				None => None,
 			};
@@ -322,15 +322,82 @@ fn parse_expr_p(tokens: &mut &[Token]) -> Option<Expr>
 	}
 }
 
-fn parse_expr_temp(tokens: &mut &[Token]) -> Option<Expr>
+fn parse_expr_b(tokens: &mut &[Token]) -> Option<Expr>
 {
-	let v = parse_expr_term(tokens)?;
-	let n = match parse_expr_p(tokens) {
+	let v = parse_expr_a(tokens)?;
+	let n = match parse_expr_b_p(tokens) {
 		Some(nn) => Some(Box::new(nn)),
 		None => None,
 	};
 
 	Some(Expr::TempStart(Box::new(v), n))
+}
+
+fn parse_expr_c_p(tokens: &mut &[Token]) -> Option<Expr>
+{
+	let t = &tokens[0];
+	match t {
+		Token::CompEqual | 
+		Token::CompInEqual |
+		Token::CompGreaterEqual |
+		Token::CompGreater |
+		Token::CompLessEqual |
+		Token::CompLess => {
+			*tokens = &tokens[1..];
+			let v = parse_expr_b(tokens)?;
+			let next = match parse_expr_c_p(tokens) {
+				Some(n) => Some(Box::new(n)),
+				None => None,
+			};
+			Some(Expr::TempOp(t.clone(), Box::new(v), next))
+		},
+		_ => None,
+	}
+}
+
+fn parse_expr_c(tokens: &mut &[Token]) -> Option<Expr>
+{
+	let v = parse_expr_b(tokens)?;
+	let n = match parse_expr_c_p(tokens) {
+		Some(nn) => Some(Box::new(nn)),
+		None => None,
+	};
+
+	Some(Expr::TempStart(Box::new(v), n))
+}
+
+fn parse_expr_d_p(tokens: &mut &[Token]) -> Option<Expr>
+{
+	let t = &tokens[0];
+	match t {
+		Token::CompAnd | 
+		Token::CompOr => {
+			*tokens = &tokens[1..];
+			let v = parse_expr_c(tokens)?;
+			let next = match parse_expr_d_p(tokens) {
+				Some(n) => Some(Box::new(n)),
+				None => None,
+			};
+			Some(Expr::TempOp(t.clone(), Box::new(v), next))
+		},
+		_ => None,
+	}
+}
+
+fn parse_expr_d(tokens: &mut &[Token]) -> Option<Expr>
+{
+	let v = parse_expr_c(tokens)?;
+	let n = match parse_expr_d_p(tokens) {
+		Some(nn) => Some(Box::new(nn)),
+		None => None,
+	};
+
+	Some(Expr::TempStart(Box::new(v), n))
+}
+
+fn parse_expr_outer(tokens: &mut &[Token]) -> Option<Expr>
+{
+    parse_expr_d(tokens)
 }
 
 fn fix_expr(expr: Expr) -> Expr {
@@ -358,7 +425,7 @@ fn fix_expr(expr: Expr) -> Expr {
 
 fn parse_expr(tokens: &mut &[Token]) -> Option<Expr>
 {
-    let expr = parse_expr_temp(tokens)?;
+    let expr = parse_expr_outer(tokens)?;
 
     Some(fix_expr(expr))
 }

@@ -55,7 +55,14 @@ fn typecheck_expr_op(token: &Token, a: Type, b: Type)
         Token::CompGreaterEqual | 
         Token::CompGreater |
         Token::CompLessEqual |
-        Token::CompLess |
+        Token::CompLess => {
+            if a == Type::I64 && b == Type::I64 {
+                Type::Bool
+            } else {
+                panic!("op '{}' cannot handle type {} / {}", token, a, b)
+            }
+        },
+
         Token::OpMul | 
         Token::OpDiv | 
         Token::OpAdd | 
@@ -161,6 +168,8 @@ fn typecheck_stmt_alloc(scope: &mut Scope,
         panic!("alloc type mismatch expected {} != got {}",
             var_type, t);
     }
+
+    scope.space.push((name.to_string(), t.clone()));
 
     (Type::None, Stmt::Alloc(name.clone(), t, Box::new(exp)))
 }

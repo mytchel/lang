@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::lexer::Token;
 use crate::assembler::Op;
 use crate::assembler::OpArg;
 use crate::assembler::Ir;
@@ -83,7 +84,7 @@ fn eval_op(ops: &Vec<Ir>,
 
 //	pretty_print_op(o, temps, stack);
 
-	match o.op {
+	match &o.op {
 		Op::Exit => {
 			std::process::exit(0)
 		},
@@ -213,7 +214,7 @@ fn eval_op(ops: &Vec<Ir>,
 			}
 		},
 	
-		Op::Add | Op::Sub | Op::Mul | Op::Div => {
+		Op::Op(token) => {
 			let a = match &o.arg1 {
 				Some(OpArg::Int(i)) => *i,
 				Some(OpArg::Temp(t)) => {
@@ -236,12 +237,31 @@ fn eval_op(ops: &Vec<Ir>,
 				_ => panic!("op expected arg2"),
 			};
 
-			let v = match o.op {
-				Op::Add => a + b,
-				Op::Sub => a - b,
-				Op::Mul => a * b,
-				Op::Div => a / b,
-				_ => panic!("bad op somehow?"),
+			let v = match token {
+				Token::OpAdd => a + b,
+				Token::OpSub => a - b,
+				Token::OpMul => a * b,
+				Token::OpDiv => a / b,
+				Token::OpRem => a % b,
+				t => {
+				    let b = match t {
+				        Token::CompEqual => a == b,
+				        Token::CompInEqual => a != b,
+				        Token::CompGreaterEqual => a >= b,
+				        Token::CompGreater => a > b,
+				        Token::CompLessEqual => a <= b,
+				        Token::CompLess => a < b,
+				        Token::CompAnd => a == 1 && b == 1,
+				        Token::CompOr => a == 1 || b == 1,
+				        _ => panic!("op {} unsupported", t),
+				    };
+
+				    if b {
+				        1
+				    } else {
+				        0
+				    }
+                }
 			};
 
 			match &o.ret {
